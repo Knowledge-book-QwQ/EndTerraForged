@@ -1,0 +1,33 @@
+modLoader="javafml"
+loaderVersion="[4,)"
+license="LGPL-3.0-or-later"
+
+[[mixins]]
+    config = "endterraforged-common.mixins.json"
+
+[[mixins]]
+    config = "endterraforged-neoforge.mixins.json"
+
+[[mods]]
+    modId="endterraforged"
+    displayName="EndTerraForged"
+    version="${version}"
+    authors="Knowledge-book-QwQ"
+    credits="Inspired by ReTerraForged (raccoonman, dags, Won-Ton, psiber)"
+    displayURL="https://github.com/Knowledge-book-QwQ/EndTerraForged/"
+    issueTrackerURL="https://github.com/Knowledge-book-QwQ/EndTerraForged/issues"
+    description="An End-dimension terrain worldgen mod inspired by ReTerraForged."
+
+[[dependencies.endterraforged]]
+    modId="neoforge"
+    mandatory=true
+    versionRange="[21,)"
+    ordering="NONE"
+    side="BOTH"
+
+[[dependencies.endterraforged]]
+	modId = "minecraft"
+	mandatory = true
+	versionRange = "[1.21.1,)"
+	ordering = "NONE"
+	side = "BOTH"

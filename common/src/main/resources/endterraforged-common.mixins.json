@@ -1,0 +1,11 @@
+{
+  "required": true,
+  "package": "endterraforged.mixin",
+  "minVersion": "0.8",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": [],
+  "client": [],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

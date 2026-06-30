@@ -37,4 +37,21 @@ public final class NoiseUtil {
     public static float clamp(float value, float min, float max) {
         return (value < min) ? min : ((value > max) ? max : value);
     }
+
+    /**
+     * Safe integer division returning {@code 0} when the divisor is zero,
+     * matching upstream RTF semantics so height-normalisation math cannot
+     * produce {@code NaN} for a degenerate {@code worldHeight}.
+     */
+    public static float div(int numerator, int denominator) {
+        return denominator == 0 ? 0.0F : (float) numerator / (float) denominator;
+    }
+
+    /**
+     * Safe float division returning {@code 0} when the divisor is zero,
+     * matching upstream RTF semantics.
+     */
+    public static float div(float numerator, float denominator) {
+        return denominator == 0.0F ? 0.0F : numerator / denominator;
+    }
 }

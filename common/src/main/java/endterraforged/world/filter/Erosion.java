@@ -29,11 +29,12 @@ import endterraforged.world.cell.Cell;
  * valley carving and sediment fans — the "realistic hydrology" feel carried
  * over from RTF.</p>
  *
- * <p><b>Determinism:</b> droplet origins are derived from
- * {@code seed(chunkX,chunkZ) xor seed(0,i)} via {@link FastRandom}, so a given
- * world seed reproduces identical erosion across reloads. The brush index/weight
- * tables are precomputed once per {@code (seed, mapSize)} and reused for every
- * droplet, avoiding per-step allocation.</p>
+ * <p><b>Determinism:</b> droplet origins are derived from the packed coordinate
+ * seed {@link NoiseUtil#seed(int, int)} combined with the world seed via
+ * {@link FastRandom#seed(long, long)}, so a given world seed reproduces
+ * identical erosion across reloads. The brush index/weight tables are
+ * precomputed once per {@code (seed, mapSize)} and reused for every droplet,
+ * avoiding per-step allocation.</p>
  *
  * <p><b>Thread safety:</b> <i>not thread-safe</i> — the brush tables are
  * read-only after construction, but {@link #apply} reuses scratch
@@ -54,6 +55,15 @@ public class Erosion implements Filter {
     private final Modifier modifier;
 
     public Erosion(int seed, int mapSize, ErosionConfig settings, Modifier modifier) {
+        if (mapSize <= 0) {
+            throw new IllegalArgumentException("mapSize must be > 0, got " + mapSize);
+        }
+        if (settings == null) {
+            throw new IllegalArgumentException("settings must not be null");
+        }
+        if (modifier == null) {
+            throw new IllegalArgumentException("modifier must not be null");
+        }
         this.seed = seed;
         this.mapSize = mapSize;
         this.modifier = modifier;

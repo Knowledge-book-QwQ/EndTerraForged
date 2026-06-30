@@ -47,12 +47,23 @@ public interface Modifier {
 
     /**
      * Linear ramp: {@code 0} below {@code min}, {@code 1} above {@code max},
-     * linear in between. Used to confine erosion to a ground band.
+     * linear in between. Used to confine erosion to a ground band. If
+     * {@code min >= max} the ramp degenerates to a step at {@code min} to
+     * avoid divide-by-zero; callers should normally pass {@code min < max}.
      */
     static Modifier range(float minValue, float maxValue) {
         final float min = minValue;
         final float max = maxValue;
         final float range = maxValue - minValue;
+        if (range <= 0.0F) {
+            // Degenerate band: treat as a hard threshold so callers don't hit NaN.
+            return new Modifier() {
+                @Override
+                public float getValueModifier(float value) {
+                    return value >= min ? 1.0F : 0.0F;
+                }
+            };
+        }
         return new Modifier() {
             @Override
             public float getValueModifier(float value) {

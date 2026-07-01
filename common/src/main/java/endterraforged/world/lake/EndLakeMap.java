@@ -91,6 +91,11 @@ public record EndLakeMap(float cellSize, float lakeChance, float bedRadius,
      *         sits; unchanged {@code inputHeight} otherwise
      */
     public float modifyHeight(float x, float z, int seed, EndHeightmap heightmap, float inputHeight) {
+        // Degenerate config guard: cellSize<=0 would make invCell=Inf and
+        // poison the worley scan with NaN. No-op instead.
+        if (cellSize <= 0.0F) {
+            return inputHeight;
+        }
         // Lakes only form on land — void stays void.
         float landness = heightmap.getLandness(x, z, seed);
         if (landness <= 0.0F) {
@@ -115,7 +120,12 @@ public record EndLakeMap(float cellSize, float lakeChance, float bedRadius,
         // locally referenced to the centre terrain, so a lake on a peak sits
         // high, a lake in a valley sits low — no sea required.
         float centerHeight = heightmap.getTerrainHeight(sample.cx, sample.cz, seed);
-        float lakeLevel = centerHeight - depth * levels.elevationRange;
+        // Lake level clamped to >= surface: a lake on low ground (centre near
+        // surface) must not punch below the void threshold. In SeaMode.NONE
+        // below-surface is void, so an unclamped lowland lake would become a
+        // void pit instead of open water. Clamping keeps the lake bed at
+        // surface — a shallow puddle rather than a hole into the void.
+        float lakeLevel = Math.max(centerHeight - depth * levels.elevationRange, levels.surface);
 
         // Lakes only lower terrain, never raise it. Where the lake level sits
         // above the upstream height (e.g. a low spot near a high-altitude

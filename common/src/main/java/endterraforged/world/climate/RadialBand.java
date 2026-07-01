@@ -25,6 +25,12 @@ record RadialBand(float radius) implements Noise {
 
     @Override
     public float compute(float x, float z, int seed) {
+        if (radius <= 0.0F) {
+            // Degenerate: no thermal gradient, everywhere is "cold" (0). Avoids
+            // div-by-zero (dist/0 = Inf/NaN) that would poison the climate
+            // chain downstream.
+            return 0.0F;
+        }
         float dist = (float) Math.sqrt(x * x + z * z);
         float v = 1.0F - dist / radius;
         return NoiseMath.clamp(v, 0.0F, 1.0F);

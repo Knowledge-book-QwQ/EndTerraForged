@@ -129,4 +129,37 @@ class EndRiverMapForkTest {
         }
         assertTrue(anyDifference, "fork-enabled map must be seed-sensitive");
     }
+
+    // ----- bug regression: B3 bed never below surface, B7 degenerate cellSize --
+
+    @Test
+    void riverBedNeverBelowSurface() {
+        // Regression for B3: bedLevel was lerp(source, surface, t) - bedDepth,
+        // which at t≈1 drops below surface → in SeaMode.NONE that carves a void
+        // trench. Now clamped to >= surface.
+        EndHeightmap map = new EndHeightmap(TestProfile.defaultEnd(), SEED);
+        EndRiverMap rivers = new EndRiverMap(380, 1.0F, 12, 90, 0.04F,
+                1.0F, 0.45F, 35.0F, 0.6F);
+        float surface = map.levels().surface;
+        for (int i = 0; i < SAMPLES; i++) {
+            if (map.getLandness(x(i), z(i), SEED) <= 0.0F) continue;
+            float carved = carve(rivers, map, x(i), z(i), SEED);
+            assertTrue(carved >= surface - 1e-4F,
+                    "river-carved height must not drop below surface (void threshold): " + carved);
+        }
+    }
+
+    @Test
+    void degenerateCellSizeIsNoOp() {
+        // Regression for B7: cellSize=0 would make invCell=Inf and poison the
+        // worley scan with NaN. Now no-op.
+        EndHeightmap map = new EndHeightmap(TestProfile.defaultEnd(), SEED);
+        EndRiverMap rivers = new EndRiverMap(0.0F, 1.0F, 12, 90, 0.04F);
+        for (int i = 0; i < SAMPLES; i++) {
+            float raw = map.getTerrainHeight(x(i), z(i), SEED);
+            float carved = carve(rivers, map, x(i), z(i), SEED);
+            assertEquals(raw, carved, 0.0F,
+                    "cellSize=0 must be no-op (not NaN)");
+        }
+    }
 }

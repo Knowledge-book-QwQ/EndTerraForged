@@ -244,4 +244,42 @@ class ClimateModulatorTest {
             assertTrue(Float.isFinite(h), "full chain must be finite (no recursion)");
         }
     }
+
+    // ----- bug regression: B5 modulator must not push height above 1.0 -----
+
+    @Test
+    void modulatedHeightNeverExceedsWorldCeiling() {
+        // Regression for B5: coldBoost=1.15 on a near-peak sample (input≈1.0)
+        // would push result > 1.0, creating a solid pillar in EndDensity.
+        // The modulator must clamp to [surface, 1.0].
+        EndClimate climate = EndClimate.defaults(SEED);
+        // Aggressive modulator to force the upper bound.
+        ClimateModulator mod = new ClimateModulator(climate, 0.50F, 0.0F, 0.5F, 2.0F);
+        EndHeightmap map = new EndHeightmap(
+                new endterraforged.world.config.TestProfile(4064, -2032, 0, 0,
+                        endterraforged.world.config.SeaMode.NONE,
+                        endterraforged.world.config.TopologyMode.ISLANDS, false), SEED);
+        for (int i = 0; i < SAMPLES; i++) {
+            float raw = map.getTerrainHeight(x(i), z(i), SEED);
+            float modulated = mod.modulate(x(i), z(i), SEED, map.levels(), raw);
+            assertTrue(modulated <= 1.0F + 1e-5F,
+                    "modulated height must not exceed 1.0 (world ceiling): " + modulated);
+            assertTrue(modulated >= map.levels().surface - 1e-5F,
+                    "modulated height must not drop below surface: " + modulated);
+        }
+    }
+
+    // ----- bug regression: B6 degenerate radius must not produce NaN -------
+
+    @Test
+    void degenerateClimateRadiusDoesNotProduceNaN() {
+        // Regression for B6: radius=0 must return 0 (cold everywhere), not NaN.
+        // EndClimate constructed with climateRadius=0 must still yield finite
+        // temperature everywhere.
+        EndClimate climate = new EndClimate(SEED, 0.0F, 600, 800, 1000, 0.25F);
+        for (int i = 0; i < SAMPLES; i++) {
+            float t = climate.getTemperature(x(i) * 10, z(i) * 10, SEED);
+            assertTrue(Float.isFinite(t), "temperature must be finite even with radius=0: " + t);
+        }
+    }
 }

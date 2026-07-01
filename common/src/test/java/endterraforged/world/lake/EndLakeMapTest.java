@@ -224,4 +224,36 @@ class EndLakeMapTest {
                 "lake floor range " + carvedRange + " should track local terrain range "
                         + originalRange + " (locally referenced, not sea-anchored)");
     }
+
+    // ----- bug regression: B4 lake level never below surface, B7 degenerate cellSize
+
+    @Test
+    void lakeLevelNeverBelowSurface() {
+        // Regression for B4: lakeLevel = centerHeight - depth*elevRange could
+        // drop below surface on low ground → in SeaMode.NONE that becomes a
+        // void pit instead of open water. Now clamped to >= surface.
+        EndHeightmap map = new EndHeightmap(TestProfile.defaultEnd(), SEED);
+        EndLakeMap lakes = new EndLakeMap(620, 1.0F, 28, 75, 0.06F);
+        float surface = map.levels().surface;
+        for (int i = 0; i < SAMPLES; i++) {
+            if (map.getLandness(x(i), z(i), SEED) <= 0.0F) continue;
+            float carved = carve(lakes, map, x(i), z(i), SEED);
+            assertTrue(carved >= surface - 1e-4F,
+                    "lake-carved height must not drop below surface (void threshold): " + carved);
+        }
+    }
+
+    @Test
+    void degenerateCellSizeIsNoOp() {
+        // Regression for B7: cellSize=0 would make invCell=Inf and poison the
+        // worley scan with NaN. Now no-op.
+        EndHeightmap map = new EndHeightmap(TestProfile.defaultEnd(), SEED);
+        EndLakeMap lakes = new EndLakeMap(0.0F, 1.0F, 28, 75, 0.06F);
+        for (int i = 0; i < SAMPLES; i++) {
+            float raw = map.getTerrainHeight(x(i), z(i), SEED);
+            float carved = carve(lakes, map, x(i), z(i), SEED);
+            assertEquals(raw, carved, 0.0F,
+                    "cellSize=0 must be no-op (not NaN)");
+        }
+    }
 }

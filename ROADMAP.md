@@ -111,7 +111,7 @@
   - `Continent extends Noise`（输出 `[0,1]` landness，解耦 Cell/rivers）
 - [x] 2.4 噪声模块移植（`Noises` 的 perlin/simplex/worley/warp 子集 + 组合算子 + Domain Warp）
 - [x] 2.5 `EndHeightmap` + `EndMountains`：`continent × mountains` 组合，`EndLevels` 缩放到世界高度
-- [ ] 2.6 `EndDensity`：`SeaMode` 三态的 solid/void 列决策（NO_FLOOR/NONE 表面以下置虚空，WITH_FLOOR 填海床）
+- [x] 2.6 `EndDensity`：`SeaMode` 三态的 solid/void 列决策（NO_FLOOR/NONE 表面以下置虚空，WITH_FLOOR 填海床）
 
 ### 阶段 2.5：Climate 子系统（独立 Noise 路线）
 > 调研结论：RTF 的 climate 管线（`ClimateModule`→`CellSampler`→`MultiNoiseBiomeSource`）依赖海陆 Continent 和 MultiNoise biome source，End 两者都没有；vanilla End 用专属 `the_end` biome source（几何分段，不读 climate）。因此**不直接搬 RTF 管线**，走"气候场作为独立 Noise 节点"路线。

@@ -86,6 +86,12 @@ public record ClimateModulator(EndClimate climate, float coldBoost,
                 - wetErosion * moisture;
         modulation = NoiseMath.clamp(modulation, minScale, maxScale);
         float elevation = inputHeight - levels.surface;
-        return levels.surface + elevation * modulation;
+        // Clamp to [surface, 1.0]: the modulator must not push terrain above
+        // the world ceiling (1.0) — that would create solid pillars in
+        // EndDensity (heightNorm > 1.0 is never exceeded, so the whole column
+        // turns solid). Also must not push below surface (handled by the early
+        // return above, but double-guard here for safety).
+        float result = levels.surface + elevation * modulation;
+        return NoiseMath.clamp(result, levels.surface, 1.0F);
     }
 }

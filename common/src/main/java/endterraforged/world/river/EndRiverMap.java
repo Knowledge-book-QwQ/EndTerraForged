@@ -121,6 +121,11 @@ public record EndRiverMap(float cellSize, float riverChance, float bedWidth,
      *         passes through; unchanged {@code inputHeight} otherwise
      */
     public float modifyHeight(float x, float z, int seed, EndHeightmap heightmap, float inputHeight) {
+        // Degenerate config guard: cellSize<=0 would make invCell=Inf and
+        // poison the worley scan with NaN. No-op instead.
+        if (cellSize <= 0.0F) {
+            return inputHeight;
+        }
         // Rivers only exist on land — void stays void.
         float landness = heightmap.getLandness(x, z, seed);
         if (landness <= 0.0F) {
@@ -139,22 +144,27 @@ public record EndRiverMap(float cellSize, float riverChance, float bedWidth,
 
         EndLevels levels = heightmap.levels();
         // Carve relative to the upstream height — this is what makes the river
-        // chain correctly with lakes / other post-processors placed before it.
+        // chain correctly with climate / lakes / other post-processors placed
+        // before it.
         float terrainHeight = inputHeight;
-        // Source height: raw terrain at the reach start. Sampled from the raw
-        // field (not getHeight) to avoid recursion through the post-process
-        // chain. For forks, the start is the fork point on the main reach, so
-        // sourceHeight is the terrain at that point (same as main's forkPoint
-        // height). The water level uses tNormalized, which is the projection
-        // mapped onto the main reach's t range — forks start at t=forkPoint
-        // and end at t≈1.
-        float sourceHeight = heightmap.getTerrainHeight(sample.segment.river().x1(), sample.segment.river().z1(), seed);
+        // Source height: raw terrain at the MAIN reach's start (cell centre).
+        // Both main and fork segments carry mainStartX/mainStartZ, so forks
+        // use the same cell-centre terrain as the main reach — this makes the
+        // fork's water level continuous with the main reach at the fork point
+        // (no vertical step). Sampled from getTerrainHeight (raw) to avoid
+        // recursion through the post-process chain.
+        float sourceHeight = heightmap.getTerrainHeight(
+                sample.segment.mainStartX(), sample.segment.mainStartZ(), seed);
         float tNormalized = sample.tNormalized;
-        // Bed descends from sourceHeight (tNormalized≈forkPoint for forks, 0 for main)
-        // to surface (tNormalized=1, island edge / void threshold), then drops by
-        // bedDepth so water sits in a channel rather than flush with the surface.
+        // Bed descends from sourceHeight (tNormalized=0 for main, forkPoint for
+        // fork) to surface (tNormalized=1, island edge / void threshold), then
+        // drops by bedDepth so water sits in a channel. Clamped to >= surface
+        // so the bed never punches below the void threshold (in SeaMode.NONE
+        // below-surface is void, so an unclamped bed would carve a void trench
+        // instead of a water surface).
         float bedLevel = NoiseMath.lerp(sourceHeight, levels.surface, tNormalized)
                 - bedDepth * levels.elevationRange;
+        bedLevel = Math.max(bedLevel, levels.surface);
 
         // Rivers only lower terrain, never raise it. Where the bed sits above
         // the upstream height (e.g. a low spot near a high-altitude source),
@@ -262,7 +272,7 @@ public record EndRiverMap(float cellSize, float riverChance, float bedWidth,
         float mainEndZ = startZ + (float) Math.sin(angle) * cellSize;
 
         River main = River.of(startX, startZ, mainEndX, mainEndZ);
-        RiverSegment mainSeg = new RiverSegment(main, false, 0.0F, 0.0F);
+        RiverSegment mainSeg = new RiverSegment(main, false, 0.0F, 0.0F, startX, startZ);
 
         // Fork chance: only fork if forkChance > 0 and hash clears the gate.
         if (forkChance <= 0.0F) {
@@ -291,12 +301,18 @@ public record EndRiverMap(float cellSize, float riverChance, float bedWidth,
         float forkEndZ = forkStartZ + (float) Math.sin(forkAngle) * forkLength;
 
         River fork = River.of(forkStartX, forkStartZ, forkEndX, forkEndZ);
-        RiverSegment forkSeg = new RiverSegment(fork, true, forkPoint, forkLengthFactor);
+        // Fork carries the MAIN reach's start point (startX, startZ), not the
+        // fork's own start, so source-height sampling uses the same cell-centre
+        // terrain as the main reach. This makes the fork's water level
+        // continuous with the main reach's level at the fork point — no
+        // vertical step where the fork branches off.
+        RiverSegment forkSeg = new RiverSegment(fork, true, forkPoint, forkLengthFactor, startX, startZ);
         return new RiverSegment[] { mainSeg, forkSeg };
     }
 
-    /** A river segment with metadata: whether it's a fork, and the fork parameters needed to normalise t. */
-    private record RiverSegment(River river, boolean isFork, float forkPoint, float forkLengthFactor) {
+    /** A river segment with metadata: whether it's a fork, the fork parameters needed to normalise t, and the main reach's start point (for source-height sampling). */
+    private record RiverSegment(River river, boolean isFork, float forkPoint,
+                                float forkLengthFactor, float mainStartX, float mainStartZ) {
         /**
          * Normalises the projection t onto the main reach's t range.
          * For main: tNormalized = t.

@@ -51,4 +51,18 @@ public enum SeaMode {
     public boolean voidsBelowSea() {
         return this == NO_FLOOR;
     }
+
+    /**
+     * {@code true} when the dimension has a continuous solid floor below the
+     * reference surface (i.e. a seabed). {@code WITH_FLOOR} only; {@code NONE}
+     * and {@code NO_FLOOR} both leave void below the surface — {@code NONE}
+     * because islands float over nothing, {@code NO_FLOOR} because the sea
+     * has no bed.
+     *
+     * <p>This is the single switch {@code EndDensity} uses to decide whether
+     * to keep filling solid below the surface or to carve void.</p>
+     */
+    public boolean hasFloor() {
+        return this == WITH_FLOOR;
+    }
 }

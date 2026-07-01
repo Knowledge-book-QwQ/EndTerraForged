@@ -105,19 +105,26 @@
 ### 阶段 2：维度抽象 + 末地高度场骨架
 - [x] 2.1 `DimensionProfile`：收口 `seaLevel`/`worldHeight`/`worldDepth`/`SeaMode`/`TopologyMode`/`FloatingIslands`/`defaultFluid`
 - [x] 2.2 `EndLevels`：`SeaMode.NONE` 时以"岛屿基准面 Y"为基准；`WITH_FLOOR/NO_FLOOR` 时复用 RTF `Levels`
-- [ ] 2.3 `ContinentModule` 双实现：
-  - `ContinentalShatteredContinent`（连续大陆 + 裂隙噪声）
-  - `IslandsContinent`（离散岛屿距离场）
+- [x] 2.3 `Continent` 三件套：
+  - `ContinentalShatteredContinent`（连续大陆 + 裂隙噪声，委托 `WorleyEdge.sample`）
+  - `IslandsContinent`（离散岛屿距离场，单扫描保证门控+falloff 同步）
+  - `Continent extends Noise`（输出 `[0,1]` landness，解耦 Cell/rivers）
 - [x] 2.4 噪声模块移植（`Noises` 的 perlin/simplex/worley/warp 子集 + 组合算子 + Domain Warp）
-- [ ] 2.5 `EndHeightmap`：按 `TopologyMode` 选择单层/分层，按 `SeaMode` 决定是否海洋分层
-- [ ] 2.6 `NO_FLOOR` 后处理：海平面以下密度强制置虚空（原创密度函数）
+- [x] 2.5 `EndHeightmap` + `EndMountains`：`continent × mountains` 组合，`EndLevels` 缩放到世界高度
+- [ ] 2.6 `EndDensity`：`SeaMode` 三态的 solid/void 列决策（NO_FLOOR/NONE 表面以下置虚空，WITH_FLOOR 填海床）
+
+### 阶段 2.5：Climate 子系统（独立 Noise 路线）
+> 调研结论：RTF 的 climate 管线（`ClimateModule`→`CellSampler`→`MultiNoiseBiomeSource`）依赖海陆 Continent 和 MultiNoise biome source，End 两者都没有；vanilla End 用专属 `the_end` biome source（几何分段，不读 climate）。因此**不直接搬 RTF 管线**，走"气候场作为独立 Noise 节点"路线。
+- [ ] 2.5a `ClimateModule`（End 版）：temperature/moisture 作为独立 `Noise` 节点输出 `[0,1]`，不耦合 Continent/Levels
+- [ ] 2.5b climate 场作为 heightmap 的可选调制器（如温度影响山脉高度）
+- [ ] 2.5c climate 场作为未来 biome source 的子类型选择器
 
 ### 阶段 3：接入 vanilla 末地生成（含高度扩展）
 - [ ] 3.1 自定义末地 `DimensionType`（`min_y=-2032, height=4064`，对标 RTF）
 - [ ] 3.2 `EndPreset` + `EndNoiseGeneratorSettings`（注册到末地维度）
-- [ ] 3.3 `EndNoiseRouterData`：重建末地 `NoiseRouter`，`final_density` 用高度场 + 侵蚀场 + `NO_FLOOR` 后处理
+- [ ] 3.3 `EndNoiseRouterData`：重建末地 `NoiseRouter`，`final_density` 桥接 `EndDensity`（已含 NO_FLOOR 决策）
 - [ ] 3.4 Mixin 维度隔离：扩展 `MixinRandomState` 按 `Level` 选 Preset（overworld vs end）
-- [ ] 3.5 `EndBiomeSource`：按拓扑/海平面/岛屿分布选 biome，注入 `#minecraft:is_end` 标签
+- [ ] 3.5 `EndBiomeSource`：按拓扑/海平面/岛屿分布选 biome（几何分段为主，可选消费 climate 场做子类型变体），注入 `#minecraft:is_end` 标签
 - [ ] 3.6 浮空岛 `FloatingIslands` 生成器（独立密度函数叠加）
 
 ### 阶段 4：河流 → 裂隙/海峡改造

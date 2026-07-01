@@ -13,6 +13,7 @@
 package endterraforged.world.heightmap;
 
 import endterraforged.world.config.DimensionProfile;
+import endterraforged.world.config.SeaMode;
 import endterraforged.world.config.TopologyMode;
 import endterraforged.world.continent.Continent;
 import endterraforged.world.continent.ContinentalShatteredContinent;
@@ -52,6 +53,7 @@ public final class EndHeightmap {
     private final Noise mountains;
     private final Noise terrain;
     private final EndLevels levels;
+    private final SeaMode seaMode;
 
     /**
      * Builds an EndHeightmap from a dimension profile, using
@@ -81,6 +83,7 @@ public final class EndHeightmap {
         this.continent = buildContinent(profile.topologyMode(), seed);
         this.mountains = mountains;
         this.terrain = Noises.mul(continent, mountains);
+        this.seaMode = profile.seaMode();
     }
 
     /**
@@ -121,6 +124,11 @@ public final class EndHeightmap {
     /** The {@link EndLevels} backing this heightmap's vertical scaling. */
     public EndLevels levels() {
         return this.levels;
+    }
+
+    /** The {@link SeaMode} of the backing dimension profile. */
+    public SeaMode seaMode() {
+        return this.seaMode;
     }
 
     /** The composed terrain noise tree ({@code continent × mountains}). */

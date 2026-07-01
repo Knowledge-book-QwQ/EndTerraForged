@@ -18,6 +18,7 @@ import endterraforged.world.config.TopologyMode;
 import endterraforged.world.continent.Continent;
 import endterraforged.world.continent.ContinentalShatteredContinent;
 import endterraforged.world.continent.IslandsContinent;
+import endterraforged.world.lake.EndLakeMap;
 import endterraforged.world.noise.Noise;
 import endterraforged.world.noise.Noises;
 import endterraforged.world.noise.domain.Domain;
@@ -56,13 +57,18 @@ public final class EndHeightmap {
     private final EndLevels levels;
     private final SeaMode seaMode;
     /**
-     * Optional river post-processor. When set, {@link #getHeight} returns the
-     * river-carved height; {@link #getTerrainHeight} always returns the raw
-     * continent × mountains field (used internally by {@link EndRiverMap} to
-     * sample source / terrain heights without recursing through carving).
-     * May be {@code null} when no rivers are configured.
+     * Optional river post-processor. When set, {@link #getHeight} runs the
+     * river carver over the raw terrain. May be {@code null}.
      */
     private final EndRiverMap riverMap;
+
+    /**
+     * Optional lake post-processor. Runs after the river carver in
+     * {@link #getHeight}, so a lake basin is carved on top of any river
+     * valley — a river running through a lake carves into the lake floor, not
+     * the raw terrain. May be {@code null}.
+     */
+    private final EndLakeMap lakeMap;
 
     /**
      * Builds an EndHeightmap from a dimension profile, using
@@ -74,7 +80,7 @@ public final class EndHeightmap {
      *                {@link #getHeight} / {@link #getLandness} at query time.
      */
     public EndHeightmap(DimensionProfile profile, int seed) {
-        this(profile, seed, EndMountains.mountains2(seed), null);
+        this(profile, seed, EndMountains.mountains2(seed), null, null);
     }
 
     /**
@@ -88,27 +94,31 @@ public final class EndHeightmap {
      *                  {@link EndMountains#mountains1} or {@link EndMountains#mountains2})
      */
     EndHeightmap(DimensionProfile profile, int seed, Noise mountains) {
-        this(profile, seed, mountains, null);
+        this(profile, seed, mountains, null, null);
     }
 
     /**
-     * Full constructor with an optional river post-processor. All other
-     * constructors delegate here. Package-private: the public seam for adding
-     * rivers is {@link #withRivers(EndRiverMap)}.
+     * Full constructor with optional river + lake post-processors. All other
+     * constructors delegate here. Package-private: the public seams for adding
+     * post-processors are {@link #withRivers(EndRiverMap)} and
+     * {@link #withLakes(EndLakeMap)}.
      */
-    EndHeightmap(DimensionProfile profile, int seed, Noise mountains, EndRiverMap riverMap) {
+    EndHeightmap(DimensionProfile profile, int seed, Noise mountains,
+                 EndRiverMap riverMap, EndLakeMap lakeMap) {
         this.levels = new EndLevels(profile);
         this.continent = buildContinent(profile.topologyMode(), seed);
         this.mountains = mountains;
         this.terrain = Noises.mul(continent, mountains);
         this.seaMode = profile.seaMode();
         this.riverMap = riverMap;
+        this.lakeMap = lakeMap;
     }
 
     /**
      * Returns a new EndHeightmap with the same continent / mountains / levels
-     * but with the given river post-processor attached. The original is
-     * unchanged (immutable). Pass {@code null} to detach rivers.
+     * and the same lake post-processor, but with the given river post-processor
+     * attached. The original is unchanged (immutable). Pass {@code null} to
+     * detach rivers.
      *
      * <p>This is the public seam through which stage-4.2 wires the river
      * network into the height field. After this call, {@link #getHeight}
@@ -117,38 +127,57 @@ public final class EndHeightmap {
      */
     public EndHeightmap withRivers(EndRiverMap riverMap) {
         return new EndHeightmap(this.levels, this.continent, this.mountains,
-                this.terrain, this.seaMode, riverMap);
+                this.terrain, this.seaMode, riverMap, this.lakeMap);
+    }
+
+    /**
+     * Returns a new EndHeightmap with the same continent / mountains / levels
+     * and the same river post-processor, but with the given lake post-processor
+     * attached. The original is unchanged (immutable). Pass {@code null} to
+     * detach lakes. Lakes run after rivers in {@link #getHeight}.
+     */
+    public EndHeightmap withLakes(EndLakeMap lakeMap) {
+        return new EndHeightmap(this.levels, this.continent, this.mountains,
+                this.terrain, this.seaMode, this.riverMap, lakeMap);
     }
 
     private EndHeightmap(EndLevels levels, Continent continent, Noise mountains,
-                         Noise terrain, SeaMode seaMode, EndRiverMap riverMap) {
+                         Noise terrain, SeaMode seaMode,
+                         EndRiverMap riverMap, EndLakeMap lakeMap) {
         this.levels = levels;
         this.continent = continent;
         this.mountains = mountains;
         this.terrain = terrain;
         this.seaMode = seaMode;
         this.riverMap = riverMap;
+        this.lakeMap = lakeMap;
     }
 
     /**
-     * Final terrain height at {@code (x, z)}, with rivers applied if a
-     * {@link EndRiverMap} is attached via {@link #withRivers}.
+     * Final terrain height at {@code (x, z)}, with rivers then lakes applied
+     * if attached via {@link #withRivers} / {@link #withLakes}.
+     *
+     * <p>Post-processors chain: raw terrain → river carver → lake carver. A
+     * lake therefore carves on top of any river valley at the same location,
+     * which is the desired semantics (a river through a lake cuts into the
+     * lake floor). When neither is attached, this is identical to
+     * {@link #getTerrainHeight}.</p>
      *
      * <p>This is the value downstream consumers should query: EndDensity uses
      * it to decide column solidity, and the stage-3 DensityFunction bridge
      * will expose it as the dimension's {@code final_density}.</p>
      *
-     * <p>When no river map is attached, this is identical to
-     * {@link #getTerrainHeight}.</p>
-     *
-     * @return normalised height in {@code [surface, 1]} (river-carved where a
-     *         river passes through)
+     * @return normalised height in {@code [surface, 1]} (post-river, post-lake)
      */
     public float getHeight(float x, float z, int seed) {
-        if (this.riverMap == null) {
-            return getTerrainHeight(x, z, seed);
+        float h = getTerrainHeight(x, z, seed);
+        if (this.riverMap != null) {
+            h = this.riverMap.modifyHeight(x, z, seed, this, h);
         }
-        return this.riverMap.modifyHeight(x, z, seed, this);
+        if (this.lakeMap != null) {
+            h = this.lakeMap.modifyHeight(x, z, seed, this, h);
+        }
+        return h;
     }
 
     /**

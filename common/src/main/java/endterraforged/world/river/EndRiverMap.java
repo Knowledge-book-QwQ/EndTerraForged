@@ -72,43 +72,58 @@ public record EndRiverMap(float cellSize, float riverChance, float bedWidth,
     }
 
     /**
-     * Post-processes the terrain height at {@code (x, z)}: returns the
-     * river-carved height, or the original terrain height if no river is near.
+     * Post-processes the height at {@code (x, z)}: returns the river-carved
+     * height, or {@code inputHeight} unchanged if no river is near.
      *
-     * <p>Void (landness 0) is returned untouched — rivers only carve land.</p>
+     * <p>This is a <em>chained</em> post-processor: {@code inputHeight} is the
+     * height produced by upstream post-processors (or
+     * {@link EndHeightmap#getTerrainHeight} if this is the first). Rivers carve
+     * relative to the upstream height, so a lake placed upstream of a river
+     * correctly lowers the terrain the river then carves through. The source
+     * height (reach start, the "peak" the river descends from) is sampled from
+     * the raw terrain field to avoid recursion — a lake at the exact source
+     * point is a known minor approximation, acceptable because bed level
+     * descends to {@code surface} by {@code t=1} regardless.</p>
      *
-     * @param x         world X
-     * @param z         world Z
-     * @param seed      world seed (must match the heightmap's seed)
-     * @param heightmap the source terrain field
+     * <p>Void (landness 0) passes {@code inputHeight} through untouched —
+     * rivers only carve land.</p>
+     *
+     * @param x            world X
+     * @param z            world Z
+     * @param seed         world seed (must match the heightmap's seed)
+     * @param heightmap    the source terrain field (for landness, levels, raw
+     *                     source sampling)
+     * @param inputHeight  the upstream height at {@code (x, z)} (raw terrain if
+     *                     this is the first post-processor)
      * @return normalised height in {@code [surface, 1]}, carved where a river
-     *         passes through
+     *         passes through; unchanged {@code inputHeight} otherwise
      */
-    public float modifyHeight(float x, float z, int seed, EndHeightmap heightmap) {
+    public float modifyHeight(float x, float z, int seed, EndHeightmap heightmap, float inputHeight) {
         // Rivers only exist on land — void stays void.
         float landness = heightmap.getLandness(x, z, seed);
         if (landness <= 0.0F) {
-            return heightmap.getTerrainHeight(x, z, seed);
+            return inputHeight;
         }
 
         RiverSample sample = sampleNearestRiver(x, z, seed);
         if (sample == null) {
-            return heightmap.getTerrainHeight(x, z, seed);
+            return inputHeight;
         }
 
         float riverness = riverness(sample.distance);
         if (riverness <= 0.0F) {
-            return heightmap.getTerrainHeight(x, z, seed);
+            return inputHeight;
         }
 
         EndLevels levels = heightmap.levels();
-        // Sample the RAW (pre-river) terrain: getHeight would recurse back
-        // through modifyHeight here. getTerrainHeight is the continent ×
-        // mountains field with no carving — exactly the "original" height the
-        // carver should lower from.
-        float terrainHeight = heightmap.getTerrainHeight(x, z, seed);
-        // Source height: raw terrain at the reach start. This is the "peak"
-        // the river descends from.
+        // Carve relative to the upstream height — this is what makes the river
+        // chain correctly with lakes / other post-processors placed before it.
+        float terrainHeight = inputHeight;
+        // Source height: raw terrain at the reach start. Sampled from the raw
+        // field (not getHeight) to avoid recursion through the post-process
+        // chain. The source is a geographic reference — the "peak" the river
+        // descends from — and using raw terrain there is a stable, predictable
+        // choice even when a lake sits near the source.
         float sourceHeight = heightmap.getTerrainHeight(sample.river.x1(), sample.river.z1(), seed);
         // Bed descends from sourceHeight (t=0, island interior) to surface
         // (t=1, island edge / void threshold), then drops by bedDepth so water
@@ -117,7 +132,7 @@ public record EndRiverMap(float cellSize, float riverChance, float bedWidth,
                 - bedDepth * levels.elevationRange;
 
         // Rivers only lower terrain, never raise it. Where the bed sits above
-        // the existing terrain (e.g. a low spot near a high-altitude source),
+        // the upstream height (e.g. a low spot near a high-altitude source),
         // the min() leaves the terrain untouched — faithful to RTF's
         // `if (finalHeight < cell.height) cell.height = finalHeight` guard.
         float carved = NoiseMath.lerp(terrainHeight, bedLevel, riverness);

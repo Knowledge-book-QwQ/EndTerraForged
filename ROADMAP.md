@@ -135,7 +135,7 @@
 - [x] 4.2 河流组合进 `EndHeightmap`：`withRivers(EndRiverMap)` 注入，`getHeight` 走 post-river，`getTerrainHeight` 暴露 raw 供 carver 内部采样避免递归 — 纯逻辑
 - [ ] 4.3 `SeaMode.NONE`：河流终点=岛缘虚空，水位基准=岛屿基准面
 - [ ] 4.4 `SeaMode.WITH_FLOOR/NO_FLOOR`：河流终点=海，形成海峡
-- [ ] 4.5 湖泊（平缓段撑宽 zone1）+ 沼泽（借鉴 RTF Wetland）
+- [x] 4.5 湖泊：`EndLakeMap` worley cell 圆形盆地 + hermite 岸线 falloff + 当地水位（`centerHeight - depth`，不依赖海）；`EndRiverMap.modifyHeight` 改链式签名（接受 `inputHeight`），`EndHeightmap` 串联 river→lake — 纯逻辑
 - [ ] 4.6 河流分叉（借鉴 RTF Network 树 + generateForks）
 - [ ] 4.7 放水/瀑布（stage 3 MC 集成后，借鉴 RTF placeRiverWater）
 

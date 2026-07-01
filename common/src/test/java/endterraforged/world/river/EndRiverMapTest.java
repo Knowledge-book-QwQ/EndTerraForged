@@ -29,6 +29,15 @@ class EndRiverMapTest {
     private static float x(int i) { return i * 7.3F; }
     private static float z(int i) { return i * 11.1F; }
 
+    /**
+     * Runs the river carver with the raw terrain at {@code (x, z)} as the
+     * upstream height — the contract EndHeightmap.getHeight uses when the
+     * river is the first (or only) post-processor.
+     */
+    private static float carve(EndRiverMap rivers, EndHeightmap map, float x, float z, int seed) {
+        return rivers.modifyHeight(x, z, seed, map, map.getTerrainHeight(x, z, seed));
+    }
+
     // ----- River geometry --------------------------------------------------
 
     @Test
@@ -93,7 +102,7 @@ class EndRiverMapTest {
         EndRiverMap rivers = new EndRiverMap(380, 0.0F, 12, 90, 0.04F);
         for (int i = 0; i < SAMPLES; i++) {
             float original = map.getTerrainHeight(x(i), z(i), SEED);
-            float carved = rivers.modifyHeight(x(i), z(i), SEED, map);
+            float carved = carve(rivers, map, x(i), z(i), SEED);
             assertEquals(original, carved, 0.0F,
                     "riverChance=0 must not modify terrain");
         }
@@ -106,7 +115,7 @@ class EndRiverMapTest {
         for (int i = 0; i < SAMPLES; i++) {
             if (map.getLandness(x(i), z(i), SEED) <= 0.0F) {
                 float original = map.getTerrainHeight(x(i), z(i), SEED);
-                float carved = rivers.modifyHeight(x(i), z(i), SEED, map);
+                float carved = carve(rivers, map, x(i), z(i), SEED);
                 assertEquals(original, carved, 0.0F,
                         "void must not be carved");
             }
@@ -124,7 +133,7 @@ class EndRiverMapTest {
         EndRiverMap rivers = EndRiverMap.defaults();
         for (int i = 0; i < SAMPLES; i++) {
             float original = map.getTerrainHeight(x(i), z(i), SEED);
-            float carved = rivers.modifyHeight(x(i), z(i), SEED, map);
+            float carved = carve(rivers, map, x(i), z(i), SEED);
             assertTrue(carved <= original + 1e-5f,
                     "carved height should not exceed original: " + carved + " > " + original);
         }
@@ -140,7 +149,7 @@ class EndRiverMapTest {
         float surface = map.levels().surface;
         float bedDepthAbs = rivers.bedDepth() * map.levels().elevationRange;
         for (int i = 0; i < SAMPLES; i++) {
-            float carved = rivers.modifyHeight(x(i), z(i), SEED, map);
+            float carved = carve(rivers, map, x(i), z(i), SEED);
             assertTrue(carved >= surface - bedDepthAbs - 1e-4f,
                     "carved height below surface-bedDepth: " + carved);
         }
@@ -158,7 +167,7 @@ class EndRiverMapTest {
             if (map.getLandness(x(i), z(i), SEED) > 0.0F) {
                 landCount++;
                 float original = map.getTerrainHeight(x(i), z(i), SEED);
-                float carved = rivers.modifyHeight(x(i), z(i), SEED, map);
+                float carved = carve(rivers, map, x(i), z(i), SEED);
                 if (carved < original - 1e-4f) {
                     carvedCount++;
                 }
@@ -176,8 +185,8 @@ class EndRiverMapTest {
         EndHeightmap map = new EndHeightmap(TestProfile.defaultEnd(), SEED);
         EndRiverMap rivers = EndRiverMap.defaults();
         for (int i = 0; i < SAMPLES; i++) {
-            float a = rivers.modifyHeight(x(i), z(i), SEED, map);
-            float b = rivers.modifyHeight(x(i), z(i), SEED, map);
+            float a = carve(rivers, map, x(i), z(i), SEED);
+            float b = carve(rivers, map, x(i), z(i), SEED);
             assertEquals(a, b, 0.0F, "same args should yield same carved height");
         }
     }
@@ -189,8 +198,8 @@ class EndRiverMapTest {
         EndRiverMap rivers = EndRiverMap.defaults();
         boolean anyDifference = false;
         for (int i = 0; i < SAMPLES; i++) {
-            float a = rivers.modifyHeight(x(i), z(i), SEED, mapA);
-            float b = rivers.modifyHeight(x(i), z(i), SEED + 1, mapB);
+            float a = carve(rivers, mapA, x(i), z(i), SEED);
+            float b = carve(rivers, mapB, x(i), z(i), SEED + 1);
             if (Float.floatToIntBits(a) != Float.floatToIntBits(b)) {
                 anyDifference = true;
                 break;
@@ -237,7 +246,7 @@ class EndRiverMapTest {
         EndRiverMap rivers = EndRiverMap.defaults();
         float surface = map.levels().surface;
         for (int i = 0; i < SAMPLES; i++) {
-            float carved = rivers.modifyHeight(x(i), z(i), SEED, map);
+            float carved = carve(rivers, map, x(i), z(i), SEED);
             assertTrue(Float.isFinite(carved), "carved height not finite");
             assertTrue(carved >= surface - 0.2F,
                     "carved height way below surface: " + carved);

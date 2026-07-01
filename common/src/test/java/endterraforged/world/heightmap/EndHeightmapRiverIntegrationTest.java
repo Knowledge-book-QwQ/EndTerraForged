@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import org.junit.jupiter.api.Test;
 
 import endterraforged.world.config.TestProfile;
+import endterraforged.world.lake.EndLakeMap;
 import endterraforged.world.river.EndRiverMap;
 
 /**
@@ -143,5 +144,106 @@ class EndHeightmapRiverIntegrationTest {
                     Float.floatToIntBits(b.getHeight(x(i), z(i), SEED)),
                     "withRivers must be deterministic across instances");
         }
+    }
+
+    // ----- stage-4.5: lake integration + river→lake chaining --------------
+
+    @Test
+    void withLakesGetHeightCarvesAtLeastSomeLand() {
+        EndHeightmap base = new EndHeightmap(TestProfile.defaultEnd(), SEED);
+        EndHeightmap withLakes = base.withLakes(new EndLakeMap(620, 1.0F, 28, 75, 0.06F));
+
+        int carved = 0;
+        int land = 0;
+        for (int i = 0; i < SAMPLES; i++) {
+            if (base.getLandness(x(i), z(i), SEED) <= 0.0F) continue;
+            land++;
+            float raw = base.getTerrainHeight(x(i), z(i), SEED);
+            float cut = withLakes.getHeight(x(i), z(i), SEED);
+            if (cut < raw - 1e-4F) carved++;
+        }
+        assertTrue(land > 0, "should have some land samples");
+        assertTrue(carved > 0,
+                "with lakeChance=1, getHeight should carve some land, got 0/" + land);
+    }
+
+    @Test
+    void withLakesNeverRaisesTerrain() {
+        EndHeightmap base = new EndHeightmap(TestProfile.defaultEnd(), SEED);
+        EndHeightmap withLakes = base.withLakes(EndLakeMap.defaults());
+        for (int i = 0; i < SAMPLES; i++) {
+            float raw = base.getTerrainHeight(x(i), z(i), SEED);
+            float cut = withLakes.getHeight(x(i), z(i), SEED);
+            assertTrue(cut <= raw + 1e-5F,
+                    "lake-carved getHeight should not exceed raw terrain: " + cut + " > " + raw);
+        }
+    }
+
+    @Test
+    void withLakesLeavesVoidUntouched() {
+        EndHeightmap base = new EndHeightmap(TestProfile.defaultEnd(), SEED);
+        EndHeightmap withLakes = base.withLakes(EndLakeMap.defaults());
+        for (int i = 0; i < SAMPLES; i++) {
+            if (base.getLandness(x(i), z(i), SEED) > 0.0F) continue;
+            assertEquals(base.getTerrainHeight(x(i), z(i), SEED),
+                    withLakes.getHeight(x(i), z(i), SEED), 0.0F,
+                    "void columns must not be carved by lakes");
+        }
+    }
+
+    @Test
+    void withLakesDoesNotMutateBase() {
+        EndHeightmap base = new EndHeightmap(TestProfile.defaultEnd(), SEED);
+        EndHeightmap withLakes = base.withLakes(EndLakeMap.defaults());
+        for (int i = 0; i < SAMPLES; i++) {
+            assertEquals(base.getTerrainHeight(x(i), z(i), SEED),
+                    base.getHeight(x(i), z(i), SEED), 0.0F,
+                    "withLakes must not mutate the original heightmap");
+        }
+        assertTrue(withLakes != base, "withLakes must return a new instance");
+    }
+
+    @Test
+    void withLakesNullDetaches() {
+        EndHeightmap withLakes = new EndHeightmap(TestProfile.defaultEnd(), SEED)
+                .withLakes(EndLakeMap.defaults());
+        EndHeightmap detached = withLakes.withLakes(null);
+        for (int i = 0; i < SAMPLES; i++) {
+            assertEquals(detached.getTerrainHeight(x(i), z(i), SEED),
+                    detached.getHeight(x(i), z(i), SEED), 0.0F,
+                    "withLakes(null) should detach the lake post-processor");
+        }
+    }
+
+    @Test
+    void riverAndLakeChainDoesNotOverflowAndBothCanCarve() {
+        // Chain river → lake: getHeight runs river carver, then lake carver on
+        // the river-carved height. With both at chance=1, every land sample
+        // hits both carvers. If either recursed through getHeight instead of
+        // getTerrainHeight for its raw sampling, this would stack-overflow.
+        EndHeightmap chained = new EndHeightmap(TestProfile.defaultEnd(), SEED)
+                .withRivers(new EndRiverMap(380, 1.0F, 12, 90, 0.04F))
+                .withLakes(new EndLakeMap(620, 1.0F, 28, 75, 0.06F));
+        int carvedBySomething = 0;
+        for (int i = 0; i < SAMPLES; i++) {
+            float h = chained.getHeight(x(i), z(i), SEED);
+            assertTrue(Float.isFinite(h), "chained getHeight must be finite (no recursion)");
+            if (chained.getLandness(x(i), z(i), SEED) > 0.0F
+                    && h < chained.getTerrainHeight(x(i), z(i), SEED) - 1e-4F) {
+                carvedBySomething++;
+            }
+        }
+        assertTrue(carvedBySomething > 0,
+                "river+lake chain should carve at least some land");
+    }
+
+    @Test
+    void withRiversAndLakesPreservesLevelsAndSeaMode() {
+        EndHeightmap base = new EndHeightmap(TestProfile.defaultEnd(), SEED);
+        EndHeightmap both = base
+                .withRivers(EndRiverMap.defaults())
+                .withLakes(EndLakeMap.defaults());
+        assertEquals(base.levels(), both.levels(), "chain must preserve EndLevels");
+        assertEquals(base.seaMode(), both.seaMode(), "chain must preserve SeaMode");
     }
 }

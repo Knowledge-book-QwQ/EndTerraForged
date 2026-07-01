@@ -37,4 +37,37 @@ public final class Domains {
     public static Domain domain(Noise x, Noise z, Noise distance) {
         return new DomainWarp(x, z, distance);
     }
+
+    /**
+     * Returns a domain that applies no offset — the identity coordinate
+     * transform. Used by consumers (e.g. continent modules) that accept an
+     * injected {@link Domain} but need a no-warp default without paying for
+     * three {@code Constant(0)} samples per query.
+     */
+    public static Domain identity() {
+        return Identity.INSTANCE;
+    }
+
+    /**
+     * Singleton zero-offset domain. {@code mapAll} returns itself unchanged
+     * since there are no child noises to recurse.
+     */
+    private enum Identity implements Domain {
+        INSTANCE;
+
+        @Override
+        public float getOffsetX(float x, float z, int seed) {
+            return 0.0F;
+        }
+
+        @Override
+        public float getOffsetZ(float x, float z, int seed) {
+            return 0.0F;
+        }
+
+        @Override
+        public Domain mapAll(Noise.Visitor visitor) {
+            return this;
+        }
+    }
 }

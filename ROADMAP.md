@@ -136,7 +136,7 @@
 - [x] 4.3 `SeaMode.NONE`：河流终点=岛缘虚空，水位基准=岛屿基准面（`surface=islandBaselineY`，carver 读 `levels.surface`，契约已固化）
 - [x] 4.4 `SeaMode.WITH_FLOOR/NO_FLOOR`：河流终点=海（`surface=seaLevelY`，NO_FLOOR 与 WITH_FLOOR 共享 surface，仅 floor 不同）
 - [x] 4.5 湖泊：`EndLakeMap` worley cell 圆形盆地 + hermite 岸线 falloff + 当地水位（`centerHeight - depth`，不依赖海）；`EndRiverMap.modifyHeight` 改链式签名（接受 `inputHeight`），`EndHeightmap` 串联 river→lake — 纯逻辑
-- [ ] 4.6 河流分叉（借鉴 RTF Network 树 + generateForks）
+- [x] 4.6 河流分叉：每条主河流可在 `forkPoint` 处分叉出一条支流（最多一层），水位从 fork 点而非源头下降（`tNormalized` 映射），`RiverSegment` 记录 fork 元数据，`sampleNearestRiver` 遍历 main+fork 找最近 — 纯逻辑
 - [ ] 4.7 放水/瀑布（stage 3 MC 集成后，借鉴 RTF placeRiverWater）
 
 ### 阶段 5：可调界面 + 打磨

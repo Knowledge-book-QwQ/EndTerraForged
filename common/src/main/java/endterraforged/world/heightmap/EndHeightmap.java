@@ -22,6 +22,7 @@ import endterraforged.world.noise.Noise;
 import endterraforged.world.noise.Noises;
 import endterraforged.world.noise.domain.Domain;
 import endterraforged.world.noise.domain.Domains;
+import endterraforged.world.river.EndRiverMap;
 
 /**
  * The End dimension's master height field: composes the continent landness
@@ -54,6 +55,14 @@ public final class EndHeightmap {
     private final Noise terrain;
     private final EndLevels levels;
     private final SeaMode seaMode;
+    /**
+     * Optional river post-processor. When set, {@link #getHeight} returns the
+     * river-carved height; {@link #getTerrainHeight} always returns the raw
+     * continent × mountains field (used internally by {@link EndRiverMap} to
+     * sample source / terrain heights without recursing through carving).
+     * May be {@code null} when no rivers are configured.
+     */
+    private final EndRiverMap riverMap;
 
     /**
      * Builds an EndHeightmap from a dimension profile, using
@@ -65,7 +74,7 @@ public final class EndHeightmap {
      *                {@link #getHeight} / {@link #getLandness} at query time.
      */
     public EndHeightmap(DimensionProfile profile, int seed) {
-        this(profile, seed, EndMountains.mountains2(seed));
+        this(profile, seed, EndMountains.mountains2(seed), null);
     }
 
     /**
@@ -79,28 +88,82 @@ public final class EndHeightmap {
      *                  {@link EndMountains#mountains1} or {@link EndMountains#mountains2})
      */
     EndHeightmap(DimensionProfile profile, int seed, Noise mountains) {
+        this(profile, seed, mountains, null);
+    }
+
+    /**
+     * Full constructor with an optional river post-processor. All other
+     * constructors delegate here. Package-private: the public seam for adding
+     * rivers is {@link #withRivers(EndRiverMap)}.
+     */
+    EndHeightmap(DimensionProfile profile, int seed, Noise mountains, EndRiverMap riverMap) {
         this.levels = new EndLevels(profile);
         this.continent = buildContinent(profile.topologyMode(), seed);
         this.mountains = mountains;
         this.terrain = Noises.mul(continent, mountains);
         this.seaMode = profile.seaMode();
+        this.riverMap = riverMap;
     }
 
     /**
-     * Normalised terrain height in {@code [0,1]} world units at {@code (x, z)}.
+     * Returns a new EndHeightmap with the same continent / mountains / levels
+     * but with the given river post-processor attached. The original is
+     * unchanged (immutable). Pass {@code null} to detach rivers.
      *
-     * <p>Computed as {@code surface + elevationRange × (continent × mountains)}.
-     * Returns exactly {@code surface} where the continent reports no land
-     * (landness 0), so the terrain floor is the dimension's reference surface
-     * and the consumer can treat "height == surface with landness 0" as void.</p>
+     * <p>This is the public seam through which stage-4.2 wires the river
+     * network into the height field. After this call, {@link #getHeight}
+     * returns carved heights; downstream consumers (EndDensity, stage-3
+     * DensityFunction bridge) automatically pick up the river valleys.</p>
+     */
+    public EndHeightmap withRivers(EndRiverMap riverMap) {
+        return new EndHeightmap(this.levels, this.continent, this.mountains,
+                this.terrain, this.seaMode, riverMap);
+    }
+
+    private EndHeightmap(EndLevels levels, Continent continent, Noise mountains,
+                         Noise terrain, SeaMode seaMode, EndRiverMap riverMap) {
+        this.levels = levels;
+        this.continent = continent;
+        this.mountains = mountains;
+        this.terrain = terrain;
+        this.seaMode = seaMode;
+        this.riverMap = riverMap;
+    }
+
+    /**
+     * Final terrain height at {@code (x, z)}, with rivers applied if a
+     * {@link EndRiverMap} is attached via {@link #withRivers}.
      *
-     * @param x    world X
-     * @param z    world Z
-     * @param seed the world seed (must match the seed passed at construction
-     *             for the continent cell layout to be consistent)
-     * @return normalised height in {@code [surface, 1]}
+     * <p>This is the value downstream consumers should query: EndDensity uses
+     * it to decide column solidity, and the stage-3 DensityFunction bridge
+     * will expose it as the dimension's {@code final_density}.</p>
+     *
+     * <p>When no river map is attached, this is identical to
+     * {@link #getTerrainHeight}.</p>
+     *
+     * @return normalised height in {@code [surface, 1]} (river-carved where a
+     *         river passes through)
      */
     public float getHeight(float x, float z, int seed) {
+        if (this.riverMap == null) {
+            return getTerrainHeight(x, z, seed);
+        }
+        return this.riverMap.modifyHeight(x, z, seed, this);
+    }
+
+    /**
+     * Raw terrain height at {@code (x, z)} — continent × mountains scaled to
+     * world height, with <em>no</em> river carving. Used internally by
+     * {@link EndRiverMap#modifyHeight} to sample source / terrain heights
+     * without recursing through the carving step.
+     *
+     * <p>External callers should normally use {@link #getHeight}; this is
+     * exposed for the river carver and for diagnostics that want to see the
+     * pre-river shape.</p>
+     *
+     * @return normalised height in {@code [surface, 1]} (pre-river)
+     */
+    public float getTerrainHeight(float x, float z, int seed) {
         return this.levels.surface + this.levels.elevationRange * this.terrain.compute(x, z, seed);
     }
 

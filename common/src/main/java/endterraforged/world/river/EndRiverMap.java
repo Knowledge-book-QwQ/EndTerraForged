@@ -88,26 +88,28 @@ public record EndRiverMap(float cellSize, float riverChance, float bedWidth,
         // Rivers only exist on land — void stays void.
         float landness = heightmap.getLandness(x, z, seed);
         if (landness <= 0.0F) {
-            return heightmap.getHeight(x, z, seed);
+            return heightmap.getTerrainHeight(x, z, seed);
         }
 
         RiverSample sample = sampleNearestRiver(x, z, seed);
         if (sample == null) {
-            return heightmap.getHeight(x, z, seed);
+            return heightmap.getTerrainHeight(x, z, seed);
         }
 
         float riverness = riverness(sample.distance);
         if (riverness <= 0.0F) {
-            return heightmap.getHeight(x, z, seed);
+            return heightmap.getTerrainHeight(x, z, seed);
         }
 
         EndLevels levels = heightmap.levels();
-        float terrainHeight = heightmap.getHeight(x, z, seed);
-        // Source height: terrain at the reach start. This is the "peak" the
-        // river descends from. Sampling the heightmap at the source point is
-        // safe — it does not recurse through modifyHeight (getHeight is the
-        // raw continent × mountains field, pre-river).
-        float sourceHeight = heightmap.getHeight(sample.river.x1(), sample.river.z1(), seed);
+        // Sample the RAW (pre-river) terrain: getHeight would recurse back
+        // through modifyHeight here. getTerrainHeight is the continent ×
+        // mountains field with no carving — exactly the "original" height the
+        // carver should lower from.
+        float terrainHeight = heightmap.getTerrainHeight(x, z, seed);
+        // Source height: raw terrain at the reach start. This is the "peak"
+        // the river descends from.
+        float sourceHeight = heightmap.getTerrainHeight(sample.river.x1(), sample.river.z1(), seed);
         // Bed descends from sourceHeight (t=0, island interior) to surface
         // (t=1, island edge / void threshold), then drops by bedDepth so water
         // sits in a channel rather than flush with the surface.

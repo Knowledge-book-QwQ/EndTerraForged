@@ -92,7 +92,7 @@ class EndRiverMapTest {
         EndHeightmap map = new EndHeightmap(TestProfile.defaultEnd(), SEED);
         EndRiverMap rivers = new EndRiverMap(380, 0.0F, 12, 90, 0.04F);
         for (int i = 0; i < SAMPLES; i++) {
-            float original = map.getHeight(x(i), z(i), SEED);
+            float original = map.getTerrainHeight(x(i), z(i), SEED);
             float carved = rivers.modifyHeight(x(i), z(i), SEED, map);
             assertEquals(original, carved, 0.0F,
                     "riverChance=0 must not modify terrain");
@@ -105,7 +105,7 @@ class EndRiverMapTest {
         EndRiverMap rivers = EndRiverMap.defaults();
         for (int i = 0; i < SAMPLES; i++) {
             if (map.getLandness(x(i), z(i), SEED) <= 0.0F) {
-                float original = map.getHeight(x(i), z(i), SEED);
+                float original = map.getTerrainHeight(x(i), z(i), SEED);
                 float carved = rivers.modifyHeight(x(i), z(i), SEED, map);
                 assertEquals(original, carved, 0.0F,
                         "void must not be carved");
@@ -118,10 +118,12 @@ class EndRiverMapTest {
     @Test
     void carvedHeightNeverExceedsOriginal() {
         // Rivers only lower terrain (lerp toward a lower bed), never raise it.
+        // Sample getTerrainHeight (raw, pre-river) so the comparison holds even
+        // if the heightmap ever gains its own river attachment.
         EndHeightmap map = new EndHeightmap(TestProfile.defaultEnd(), SEED);
         EndRiverMap rivers = EndRiverMap.defaults();
         for (int i = 0; i < SAMPLES; i++) {
-            float original = map.getHeight(x(i), z(i), SEED);
+            float original = map.getTerrainHeight(x(i), z(i), SEED);
             float carved = rivers.modifyHeight(x(i), z(i), SEED, map);
             assertTrue(carved <= original + 1e-5f,
                     "carved height should not exceed original: " + carved + " > " + original);
@@ -155,7 +157,7 @@ class EndRiverMapTest {
         for (int i = 0; i < SAMPLES; i++) {
             if (map.getLandness(x(i), z(i), SEED) > 0.0F) {
                 landCount++;
-                float original = map.getHeight(x(i), z(i), SEED);
+                float original = map.getTerrainHeight(x(i), z(i), SEED);
                 float carved = rivers.modifyHeight(x(i), z(i), SEED, map);
                 if (carved < original - 1e-4f) {
                     carvedCount++;

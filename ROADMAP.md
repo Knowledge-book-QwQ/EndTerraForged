@@ -132,7 +132,7 @@
 > 调研结论：RTF 河流是 2D heightmap 雕刻（非 3D 体积水流），依赖海平面（水位基准=海，终点=海）。End 版重新设计：源头=岛峰，终点=岛缘虚空，水位沿程下降。借鉴 RTF 的 zone1-4 雕刻轮廓 + RiverWarp 路径扭曲 + 按列放水/瀑布检测。
 - [x] 4.0 `River` 2D 线段几何（距离/投影/法向量）— 纯逻辑
 - [x] 4.1 `EndRiverMap`：worley cell 河流网络 + zone 雕刻 + 沿程水位下降 — 纯逻辑
-- [ ] 4.2 河流组合进 `EndHeightmap`（后处理：`lerp(height, riverBed, riverness)`）
+- [x] 4.2 河流组合进 `EndHeightmap`：`withRivers(EndRiverMap)` 注入，`getHeight` 走 post-river，`getTerrainHeight` 暴露 raw 供 carver 内部采样避免递归 — 纯逻辑
 - [ ] 4.3 `SeaMode.NONE`：河流终点=岛缘虚空，水位基准=岛屿基准面
 - [ ] 4.4 `SeaMode.WITH_FLOOR/NO_FLOOR`：河流终点=海，形成海峡
 - [ ] 4.5 湖泊（平缓段撑宽 zone1）+ 沼泽（借鉴 RTF Wetland）

@@ -91,24 +91,24 @@
 - [x] 本企划 + 开发规范
 - [x] 第一小步：移植 `FastRandom` + `NoiseUtil`（已编译验证）
 
-### 阶段 1：移植水力滴粒侵蚀（进行中）
+### 阶段 1：移植水力滴粒侵蚀（已完成）
 目标：在末地高度场上跑通 droplet erosion，作为独立滤波器，暂不接入 chunk 生成。
 
 - [x] 1.1 移植纯工具类：`FastRandom`、`NoiseUtil.seed/clamp`
-- [ ] 1.2 移植 `Cell` 的最小字段集（`height`/`sediment`/`heightErosion`/`erosionMask`）
-- [ ] 1.3 移植 `Filter` / `Filterable` / `Size` / `Modifier` 接口
-- [ ] 1.4 移植 `FilterSettings.Erosion` 配置（Codec 化）
-- [ ] 1.5 移植 `Erosion` 算法本体，`Factory` 改用 `DimensionProfile` 基准面
-- [ ] 1.6 单元测试：固定种子下 droplet 在合成高度场上的侵蚀/沉积行为
-- [ ] 1.7 编译通过 + 提交
+- [x] 1.2 移植 `Cell` 的最小字段集（`height`/`sediment`/`heightErosion`/`erosionMask`）
+- [x] 1.3 移植 `Filter` / `Filterable` / `Size` / `Modifier` 接口
+- [x] 1.4 移植 `ErosionConfig`（纯 POJO；Codec 化与其余 DFU 桥接一并延后到阶段 3）
+- [x] 1.5 移植 `Erosion` 算法本体，`Factory` 改用 `DimensionProfile` 基准面
+- [x] 1.6 单元测试：固定种子下 droplet 在合成高度场上的侵蚀/沉积行为
+- [x] 1.7 编译通过 + 提交
 
 ### 阶段 2：维度抽象 + 末地高度场骨架
-- [ ] 2.1 `DimensionProfile`：收口 `seaLevel`/`worldHeight`/`worldDepth`/`SeaMode`/`TopologyMode`/`FloatingIslands`/`defaultFluid`
-- [ ] 2.2 `EndLevels`：`SeaMode.NONE` 时以"岛屿基准面 Y"为基准；`WITH_FLOOR/NO_FLOOR` 时复用 RTF `Levels`
+- [x] 2.1 `DimensionProfile`：收口 `seaLevel`/`worldHeight`/`worldDepth`/`SeaMode`/`TopologyMode`/`FloatingIslands`/`defaultFluid`
+- [x] 2.2 `EndLevels`：`SeaMode.NONE` 时以"岛屿基准面 Y"为基准；`WITH_FLOOR/NO_FLOOR` 时复用 RTF `Levels`
 - [ ] 2.3 `ContinentModule` 双实现：
   - `ContinentalShatteredContinent`（连续大陆 + 裂隙噪声）
   - `IslandsContinent`（离散岛屿距离场）
-- [ ] 2.4 噪声模块移植（`Noises` 的 perlin/simplex/worley/warp 子集）
+- [x] 2.4 噪声模块移植（`Noises` 的 perlin/simplex/worley/warp 子集 + 组合算子 + Domain Warp）
 - [ ] 2.5 `EndHeightmap`：按 `TopologyMode` 选择单层/分层，按 `SeaMode` 决定是否海洋分层
 - [ ] 2.6 `NO_FLOOR` 后处理：海平面以下密度强制置虚空（原创密度函数）
 

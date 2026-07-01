@@ -133,8 +133,8 @@
 - [x] 4.0 `River` 2D 线段几何（距离/投影/法向量）— 纯逻辑
 - [x] 4.1 `EndRiverMap`：worley cell 河流网络 + zone 雕刻 + 沿程水位下降 — 纯逻辑
 - [x] 4.2 河流组合进 `EndHeightmap`：`withRivers(EndRiverMap)` 注入，`getHeight` 走 post-river，`getTerrainHeight` 暴露 raw 供 carver 内部采样避免递归 — 纯逻辑
-- [ ] 4.3 `SeaMode.NONE`：河流终点=岛缘虚空，水位基准=岛屿基准面
-- [ ] 4.4 `SeaMode.WITH_FLOOR/NO_FLOOR`：河流终点=海，形成海峡
+- [x] 4.3 `SeaMode.NONE`：河流终点=岛缘虚空，水位基准=岛屿基准面（`surface=islandBaselineY`，carver 读 `levels.surface`，契约已固化）
+- [x] 4.4 `SeaMode.WITH_FLOOR/NO_FLOOR`：河流终点=海（`surface=seaLevelY`，NO_FLOOR 与 WITH_FLOOR 共享 surface，仅 floor 不同）
 - [x] 4.5 湖泊：`EndLakeMap` worley cell 圆形盆地 + hermite 岸线 falloff + 当地水位（`centerHeight - depth`，不依赖海）；`EndRiverMap.modifyHeight` 改链式签名（接受 `inputHeight`），`EndHeightmap` 串联 river→lake — 纯逻辑
 - [ ] 4.6 河流分叉（借鉴 RTF Network 树 + generateForks）
 - [ ] 4.7 放水/瀑布（stage 3 MC 集成后，借鉴 RTF placeRiverWater）

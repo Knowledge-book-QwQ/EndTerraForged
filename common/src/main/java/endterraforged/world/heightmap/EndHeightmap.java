@@ -12,6 +12,7 @@
  */
 package endterraforged.world.heightmap;
 
+import endterraforged.world.climate.ClimateModulator;
 import endterraforged.world.config.DimensionProfile;
 import endterraforged.world.config.SeaMode;
 import endterraforged.world.config.TopologyMode;
@@ -71,6 +72,14 @@ public final class EndHeightmap {
     private final EndLakeMap lakeMap;
 
     /**
+     * Optional climate modulator. Runs first in the {@link #getHeight} chain
+     * (before rivers/lakes), so rivers carve the climate-modulated terrain.
+     * May be {@code null} — when absent, getHeight is purely terrain → river
+     * → lake.
+     */
+    private final ClimateModulator climateModulator;
+
+    /**
      * Builds an EndHeightmap from a dimension profile, using
      * {@link EndMountains#mountains2} as the default mountain layer.
      *
@@ -80,7 +89,7 @@ public final class EndHeightmap {
      *                {@link #getHeight} / {@link #getLandness} at query time.
      */
     public EndHeightmap(DimensionProfile profile, int seed) {
-        this(profile, seed, EndMountains.mountains2(seed), null, null);
+        this(profile, seed, EndMountains.mountains2(seed), null, null, null);
     }
 
     /**
@@ -94,24 +103,37 @@ public final class EndHeightmap {
      *                  {@link EndMountains#mountains1} or {@link EndMountains#mountains2})
      */
     EndHeightmap(DimensionProfile profile, int seed, Noise mountains) {
-        this(profile, seed, mountains, null, null);
+        this(profile, seed, mountains, null, null, null);
     }
 
     /**
-     * Full constructor with optional river + lake post-processors. All other
-     * constructors delegate here. Package-private: the public seams for adding
-     * post-processors are {@link #withRivers(EndRiverMap)} and
-     * {@link #withLakes(EndLakeMap)}.
+     * Full constructor with optional climate / river / lake post-processors.
+     * All other constructors delegate here. Package-private: the public seams
+     * for adding post-processors are {@link #withClimate},
+     * {@link #withRivers(EndRiverMap)}, {@link #withLakes(EndLakeMap)}.
      */
     EndHeightmap(DimensionProfile profile, int seed, Noise mountains,
-                 EndRiverMap riverMap, EndLakeMap lakeMap) {
+                 ClimateModulator climateModulator, EndRiverMap riverMap, EndLakeMap lakeMap) {
         this.levels = new EndLevels(profile);
         this.continent = buildContinent(profile.topologyMode(), seed);
         this.mountains = mountains;
         this.terrain = Noises.mul(continent, mountains);
         this.seaMode = profile.seaMode();
+        this.climateModulator = climateModulator;
         this.riverMap = riverMap;
         this.lakeMap = lakeMap;
+    }
+
+    /**
+     * Returns a new EndHeightmap with the same continent / mountains / levels
+     * and the same river / lake post-processors, but with the given climate
+     * modulator attached. The original is unchanged (immutable). Pass
+     * {@code null} to detach climate. Climate runs first in getHeight (before
+     * rivers/lakes), so rivers carve the climate-modulated terrain.
+     */
+    public EndHeightmap withClimate(ClimateModulator climateModulator) {
+        return new EndHeightmap(this.levels, this.continent, this.mountains,
+                this.terrain, this.seaMode, climateModulator, this.riverMap, this.lakeMap);
     }
 
     /**
@@ -119,15 +141,10 @@ public final class EndHeightmap {
      * and the same lake post-processor, but with the given river post-processor
      * attached. The original is unchanged (immutable). Pass {@code null} to
      * detach rivers.
-     *
-     * <p>This is the public seam through which stage-4.2 wires the river
-     * network into the height field. After this call, {@link #getHeight}
-     * returns carved heights; downstream consumers (EndDensity, stage-3
-     * DensityFunction bridge) automatically pick up the river valleys.</p>
      */
     public EndHeightmap withRivers(EndRiverMap riverMap) {
         return new EndHeightmap(this.levels, this.continent, this.mountains,
-                this.terrain, this.seaMode, riverMap, this.lakeMap);
+                this.terrain, this.seaMode, this.climateModulator, riverMap, this.lakeMap);
     }
 
     /**
@@ -138,39 +155,44 @@ public final class EndHeightmap {
      */
     public EndHeightmap withLakes(EndLakeMap lakeMap) {
         return new EndHeightmap(this.levels, this.continent, this.mountains,
-                this.terrain, this.seaMode, this.riverMap, lakeMap);
+                this.terrain, this.seaMode, this.climateModulator, this.riverMap, lakeMap);
     }
 
     private EndHeightmap(EndLevels levels, Continent continent, Noise mountains,
                          Noise terrain, SeaMode seaMode,
+                         ClimateModulator climateModulator,
                          EndRiverMap riverMap, EndLakeMap lakeMap) {
         this.levels = levels;
         this.continent = continent;
         this.mountains = mountains;
         this.terrain = terrain;
         this.seaMode = seaMode;
+        this.climateModulator = climateModulator;
         this.riverMap = riverMap;
         this.lakeMap = lakeMap;
     }
 
     /**
-     * Final terrain height at {@code (x, z)}, with rivers then lakes applied
-     * if attached via {@link #withRivers} / {@link #withLakes}.
+     * Final terrain height at {@code (x, z)}, with climate → rivers → lakes
+     * applied if attached via {@link #withClimate} / {@link #withRivers} /
+     * {@link #withLakes}.
      *
-     * <p>Post-processors chain: raw terrain → river carver → lake carver. A
-     * lake therefore carves on top of any river valley at the same location,
-     * which is the desired semantics (a river through a lake cuts into the
-     * lake floor). When neither is attached, this is identical to
+     * <p>Post-processors chain: raw terrain → climate modulator → river carver
+     * → lake carver. Climate runs first so rivers/lakes carve the
+     * climate-modulated surface. When none are attached, this is identical to
      * {@link #getTerrainHeight}.</p>
      *
      * <p>This is the value downstream consumers should query: EndDensity uses
      * it to decide column solidity, and the stage-3 DensityFunction bridge
      * will expose it as the dimension's {@code final_density}.</p>
      *
-     * @return normalised height in {@code [surface, 1]} (post-river, post-lake)
+     * @return normalised height in {@code [surface, 1]} (post-climate, post-river, post-lake)
      */
     public float getHeight(float x, float z, int seed) {
         float h = getTerrainHeight(x, z, seed);
+        if (this.climateModulator != null) {
+            h = this.climateModulator.modulate(x, z, seed, this.levels, h);
+        }
         if (this.riverMap != null) {
             h = this.riverMap.modifyHeight(x, z, seed, this, h);
         }

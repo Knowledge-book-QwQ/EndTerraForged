@@ -116,7 +116,7 @@
 ### 阶段 2.5：Climate 子系统（独立 Noise 路线）
 > 调研结论：RTF 的 climate 管线（`ClimateModule`→`CellSampler`→`MultiNoiseBiomeSource`）依赖海陆 Continent 和 MultiNoise biome source，End 两者都没有；vanilla End 用专属 `the_end` biome source（几何分段，不读 climate）。因此**不直接搬 RTF 管线**，走"气候场作为独立 Noise 节点"路线。
 - [x] 2.5a `EndClimate`：temperature/moisture/wind 作为独立 `Noise` 节点输出 `[0,1]`，不耦合 Continent/Levels；temperature=径向基带（中心热→外环冷）+ simplex 扰动，moisture/wind=独立 simplex — 纯逻辑
-- [ ] 2.5b climate 场作为 heightmap 的可选调制器（如温度影响山脉高度）
+- [x] 2.5b climate 场作为 heightmap 的可选调制器：`ClimateModulator` 缩放 elevation-above-surface（冷加成/wet 侵蚀），`EndHeightmap.withClimate` 注入，链式 raw→climate→river→lake — 纯逻辑
 - [ ] 2.5c climate 场作为未来 biome source 的子类型选择器
 
 ### 阶段 3：接入 vanilla 末地生成（含高度扩展）

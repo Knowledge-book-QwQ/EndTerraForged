@@ -120,6 +120,7 @@
 - [ ] 2.5c climate 场作为未来 biome source 的子类型选择器
 
 ### 阶段 3：接入 vanilla 末地生成（含高度扩展）
+> ⚠️ 受阻于沙箱网络：gradle distribution 无法下载，MC 依赖代码暂无法编译验证。纯逻辑层（stage 2.x / 4 纯算法）继续推进，MC 集成代码待环境就绪后实施。
 - [ ] 3.1 自定义末地 `DimensionType`（`min_y=-2032, height=4064`，对标 RTF）
 - [ ] 3.2 `EndPreset` + `EndNoiseGeneratorSettings`（注册到末地维度）
 - [ ] 3.3 `EndNoiseRouterData`：重建末地 `NoiseRouter`，`final_density` 桥接 `EndDensity`（已含 NO_FLOOR 决策）
@@ -127,10 +128,16 @@
 - [ ] 3.5 `EndBiomeSource`：按拓扑/海平面/岛屿分布选 biome（几何分段为主，可选消费 climate 场做子类型变体），注入 `#minecraft:is_end` 标签
 - [ ] 3.6 浮空岛 `FloatingIslands` 生成器（独立密度函数叠加）
 
-### 阶段 4：河流 → 裂隙/海峡改造
-- [ ] 4.1 复用 `UpliftRiverCarver` 几何（zone1-4 高度调制）
-- [ ] 4.2 `SeaMode.NONE`：河流终点改为「岛屿边缘/虚空」，水位语义改为「岛面基准」，形成虚空裂隙
-- [ ] 4.3 `SeaMode.WITH_FLOOR/NO_FLOOR`：河流终点改为「海」，形成海峡/岛心峡谷
+### 阶段 4：河流系统（End 版，独立于海）
+> 调研结论：RTF 河流是 2D heightmap 雕刻（非 3D 体积水流），依赖海平面（水位基准=海，终点=海）。End 版重新设计：源头=岛峰，终点=岛缘虚空，水位沿程下降。借鉴 RTF 的 zone1-4 雕刻轮廓 + RiverWarp 路径扭曲 + 按列放水/瀑布检测。
+- [x] 4.0 `River` 2D 线段几何（距离/投影/法向量）— 纯逻辑
+- [x] 4.1 `EndRiverMap`：worley cell 河流网络 + zone 雕刻 + 沿程水位下降 — 纯逻辑
+- [ ] 4.2 河流组合进 `EndHeightmap`（后处理：`lerp(height, riverBed, riverness)`）
+- [ ] 4.3 `SeaMode.NONE`：河流终点=岛缘虚空，水位基准=岛屿基准面
+- [ ] 4.4 `SeaMode.WITH_FLOOR/NO_FLOOR`：河流终点=海，形成海峡
+- [ ] 4.5 湖泊（平缓段撑宽 zone1）+ 沼泽（借鉴 RTF Wetland）
+- [ ] 4.6 河流分叉（借鉴 RTF Network 树 + generateForks）
+- [ ] 4.7 放水/瀑布（stage 3 MC 集成后，借鉴 RTF placeRiverWater）
 
 ### 阶段 5：可调界面 + 打磨
 - [ ] 5.1 `EndPreset` 配置界面（参考 RTF preset editor，暴露 `TopologyMode`/`SeaMode`/`FloatingIslands`/高度范围/侵蚀参数）

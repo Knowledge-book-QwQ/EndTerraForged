@@ -105,6 +105,7 @@ public class MixinNoiseChunk {
                 && access.endTerraForged$isEnd()) {
             router = router.mapAll(new EndDensityVisitor(
                     access.endTerraForged$getEndDensity(),
+                    access.endTerraForged$getFloatingIslandsField(),
                     (int) access.endTerraForged$getSeed()));
             this.endTerraForged$bound = true;
         }

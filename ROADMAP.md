@@ -126,7 +126,7 @@
 - [x] 3.3 `EndDensityFunction`（占位符 + `Bound`）+ `EndDensityVisitor`（mapAll 替换）+ 注册到 `DENSITY_FUNCTION_TYPE` — 编译验证通过
 - [x] 3.4 Mixin 维度隔离：`MixinRandomState` 接口注入 `EndRandomStateAccess`（ThreadLocal 捕获 seed+isEnd），`MixinNoiseChunk` `@Redirect` `NoiseRouter.mapAll` 注入 visitor — 编译验证通过
 - [x] 3.5 `EndBiomeSource`：几何环形分段（`100-8·sqrt` 径向衰减 + Simplex 扰动），5 个 vanilla End biome 显式 `Holder<Biome>` 字段，codec 注册到 `BIOME_SOURCE`，dimension JSON 覆盖 `biome_source.type` — 编译验证通过（climate 变体留待后续 seed 注入）
-- [ ] 3.6 浮空岛 `FloatingIslands` 生成器（独立密度函数叠加）
+- [x] 3.6 浮空岛 `FloatingIslands` 生成器（独立密度函数叠加）— `FloatingIslandsField`（worley cell + 径向 hermite falloff × 垂直高斯 lens）+ `FloatingIslandsFunction`（占位符 + Bound DF 包装）+ `EndDensityVisitor` 扩展（field=null 时 gating）+ `EndRandomStateAccess`/`MixinRandomState` 暴露 field + `MixinNoiseChunk` 传 field 给 visitor + `EndTerraForged` 注册 codec + `noise_settings` final_density 用 `add`+`clamp` 组合（OR 语义）— 编译验证通过，10 个新单测全绿
 
 ### 阶段 4：河流系统（End 版，独立于海）
 > 调研结论：RTF 河流是 2D heightmap 雕刻（非 3D 体积水流），依赖海平面（水位基准=海，终点=海）。End 版重新设计：源头=岛峰，终点=岛缘虚空，水位沿程下降。借鉴 RTF 的 zone1-4 雕刻轮廓 + RiverWarp 路径扭曲 + 按列放水/瀑布检测。

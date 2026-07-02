@@ -18,7 +18,18 @@
   },
   "noise_router": {
     "final_density": {
-      "type": "endterraforged:end_density"
+      "type": "minecraft:clamp",
+      "input": {
+        "type": "minecraft:add",
+        "argument1": {
+          "type": "endterraforged:end_density"
+        },
+        "argument2": {
+          "type": "endterraforged:floating_islands"
+        }
+      },
+      "min": 0,
+      "max": 1
     },
     "vein_toggle": 0,
     "vein_ridged": 0,

@@ -15,6 +15,7 @@ import net.minecraft.world.level.levelgen.NoiseGeneratorSettings;
 import net.minecraft.world.level.levelgen.RandomState;
 
 import endterraforged.world.config.EndDefaults;
+import endterraforged.world.floatingislands.FloatingIslandsField;
 import endterraforged.world.heightmap.EndDensity;
 import endterraforged.world.heightmap.EndHeightmap;
 import endterraforged.world.level.levelgen.EndRandomStateAccess;
@@ -79,6 +80,16 @@ public class MixinRandomState implements EndRandomStateAccess {
     @Unique
     private EndDensity endTerraForged$endDensity = null;
 
+    /**
+     * The floating-island overlay field. Built only when {@code isEnd} and
+     * the dimension profile has {@code floatingIslandsEnabled == true}.
+     * Stays {@code null} otherwise — {@link EndDensityVisitor} treats null
+     * as "layer disabled" and leaves {@link endterraforged.world.level.levelgen.FloatingIslandsFunction}
+     * placeholders as the stateless INSTANCE (compute returns 0.0).
+     */
+    @Unique
+    private FloatingIslandsField endTerraForged$floatingIslandsField = null;
+
     @Inject(
             method = "create(Lnet/minecraft/core/HolderGetter$Provider;Lnet/minecraft/resources/ResourceKey;J)Lnet/minecraft/world/level/levelgen/RandomState;",
             at = @At("HEAD")
@@ -105,8 +116,17 @@ public class MixinRandomState implements EndRandomStateAccess {
             // system's int seed convention (high bits discarded, but the cast
             // is applied consistently everywhere the seed is used).
             int noiseSeed = (int) this.endTerraForged$seed;
+            EndDefaults profile = EndDefaults.endDefaults();
             this.endTerraForged$endDensity = new EndDensity(
-                    new EndHeightmap(EndDefaults.endDefaults(), noiseSeed));
+                    new EndHeightmap(profile, noiseSeed));
+            // Stage 3.6: build the floating-island overlay only when the
+            // profile opts in. When disabled, the field stays null and the
+            // visitor leaves floating_islands placeholders as INSTANCE (0.0),
+            // so the noise_settings add+clamp composition passes the main
+            // terrain density through unchanged.
+            if (profile.floatingIslandsEnabled()) {
+                this.endTerraForged$floatingIslandsField = FloatingIslandsField.defaults();
+            }
         }
         // Clear the capture so a nested/stray create can't poison a later <init>.
         cap[0] = -1L;
@@ -126,5 +146,10 @@ public class MixinRandomState implements EndRandomStateAccess {
     @Override
     public EndDensity endTerraForged$getEndDensity() {
         return this.endTerraForged$endDensity;
+    }
+
+    @Override
+    public FloatingIslandsField endTerraForged$getFloatingIslandsField() {
+        return this.endTerraForged$floatingIslandsField;
     }
 }

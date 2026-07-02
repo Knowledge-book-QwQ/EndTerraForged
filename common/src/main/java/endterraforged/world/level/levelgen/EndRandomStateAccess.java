@@ -8,6 +8,7 @@
  */
 package endterraforged.world.level.levelgen;
 
+import endterraforged.world.floatingislands.FloatingIslandsField;
 import endterraforged.world.heightmap.EndDensity;
 
 /**
@@ -53,4 +54,15 @@ public interface EndRandomStateAccess {
      * {@code null} for non-End dimensions.
      */
     EndDensity endTerraForged$getEndDensity();
+
+    /**
+     * The End's floating-island overlay field, built when the dimension
+     * profile has {@code floatingIslandsEnabled == true}; {@code null}
+     * otherwise (and always {@code null} for non-End dimensions). When
+     * {@code null}, {@link EndDensityVisitor} leaves
+     * {@link endterraforged.world.level.levelgen.FloatingIslandsFunction}
+     * placeholders as the stateless INSTANCE so they contribute {@code 0.0}
+     * to the add+clamp composition in {@code noise_settings}.
+     */
+    FloatingIslandsField endTerraForged$getFloatingIslandsField();
 }

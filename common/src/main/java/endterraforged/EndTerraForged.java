@@ -9,6 +9,7 @@ import net.minecraft.resources.ResourceLocation;
 
 import endterraforged.world.level.biome.EndBiomeSource;
 import endterraforged.world.level.levelgen.EndDensityFunction;
+import endterraforged.world.level.levelgen.FloatingIslandsFunction;
 
 /**
  * Common bootstrap entry-point shared by all mod loaders (Fabric &amp; NeoForge).
@@ -43,6 +44,13 @@ public class EndTerraForged {
 				location(EndDensityFunction.NAME), EndDensityFunction.CODEC);
 		LOGGER.debug("EndTerraForged: registered density function {}",
 				EndDensityFunction.NAME);
+		// Stage 3.6: floating-island overlay layer. Stateless unit codec —
+		// the live FloatingIslandsField is bound at NoiseChunk construction
+		// by EndDensityVisitor when the profile opts in.
+		Registry.register(BuiltInRegistries.DENSITY_FUNCTION_TYPE,
+				location(FloatingIslandsFunction.NAME), FloatingIslandsFunction.CODEC);
+		LOGGER.debug("EndTerraForged: registered density function {}",
+				FloatingIslandsFunction.NAME);
 	}
 
 	/**

@@ -120,12 +120,12 @@
 - [ ] 2.5c climate 场作为未来 biome source 的子类型选择器
 
 ### 阶段 3：接入 vanilla 末地生成（含高度扩展）
-> ⚠️ 受阻于沙箱网络：gradle distribution 无法下载，MC 依赖代码暂无法编译验证。纯逻辑层（stage 2.x / 4 纯算法）继续推进，MC 集成代码待环境就绪后实施。
-- [ ] 3.1 自定义末地 `DimensionType`（`min_y=-2032, height=4064`，对标 RTF）
-- [ ] 3.2 `EndPreset` + `EndNoiseGeneratorSettings`（注册到末地维度）
-- [ ] 3.3 `EndNoiseRouterData`：重建末地 `NoiseRouter`，`final_density` 桥接 `EndDensity`（已含 NO_FLOOR 决策）
-- [ ] 3.4 Mixin 维度隔离：扩展 `MixinRandomState` 按 `Level` 选 Preset（overworld vs end）
-- [ ] 3.5 `EndBiomeSource`：按拓扑/海平面/岛屿分布选 biome（几何分段为主，可选消费 climate 场做子类型变体），注入 `#minecraft:is_end` 标签
+> 环境已通：gradle 8.14.4 + Java 21 + 沙箱 HTTP 代理（`GRADLE_OPTS` 设 `127.0.0.1:18080`）。三模块编译通过，174 测试全绿。MC 集成采用 RTF 的「占位符 DF + mapAll 晚绑定」模式：`EndDensityFunction` 占位符经 DFU 反序列化进 `noise_settings`，`MixinNoiseChunk` 在 `NoiseChunk.<init>` 的 `router.mapAll` 处用 `EndDensityVisitor` 把占位符换成携带 seed+`EndDensity` 的 `Bound` 实例。
+- [x] 3.1 自定义末地 `DimensionType`（`min_y=-2032, height=4064`，对标 RTF）— 数据包覆盖 `data/minecraft/dimension_type/the_end.json`
+- [x] 3.2 `noise_settings` 覆盖 `the_end.json`，`final_density` 指向 `endterraforged:end_density`；`EndDefaults` 作为 stage-3.2 `EndPreset` 的前身提供默认 profile — 数据包 + 代码
+- [x] 3.3 `EndDensityFunction`（占位符 + `Bound`）+ `EndDensityVisitor`（mapAll 替换）+ 注册到 `DENSITY_FUNCTION_TYPE` — 编译验证通过
+- [x] 3.4 Mixin 维度隔离：`MixinRandomState` 接口注入 `EndRandomStateAccess`（ThreadLocal 捕获 seed+isEnd），`MixinNoiseChunk` `@Redirect` `NoiseRouter.mapAll` 注入 visitor — 编译验证通过
+- [x] 3.5 `EndBiomeSource`：几何环形分段（`100-8·sqrt` 径向衰减 + Simplex 扰动），5 个 vanilla End biome 显式 `Holder<Biome>` 字段，codec 注册到 `BIOME_SOURCE`，dimension JSON 覆盖 `biome_source.type` — 编译验证通过（climate 变体留待后续 seed 注入）
 - [ ] 3.6 浮空岛 `FloatingIslands` 生成器（独立密度函数叠加）
 
 ### 阶段 4：河流系统（End 版，独立于海）

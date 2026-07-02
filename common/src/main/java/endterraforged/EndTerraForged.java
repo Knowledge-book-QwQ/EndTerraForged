@@ -7,6 +7,7 @@ import net.minecraft.core.Registry;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 
+import endterraforged.world.level.biome.EndBiomeSource;
 import endterraforged.world.level.levelgen.EndDensityFunction;
 
 /**
@@ -23,6 +24,7 @@ public class EndTerraForged {
 	public static void bootstrap() {
 		LOGGER.info("EndTerraForged bootstrap: initialising End dimension worldgen.");
 		registerDensityFunctions();
+		registerBiomeSources();
 	}
 
 	/**
@@ -41,6 +43,24 @@ public class EndTerraForged {
 				location(EndDensityFunction.NAME), EndDensityFunction.CODEC);
 		LOGGER.debug("EndTerraForged: registered density function {}",
 				EndDensityFunction.NAME);
+	}
+
+	/**
+	 * Registers the End's custom {@link net.minecraft.world.level.biome.BiomeSource}
+	 * codec on the vanilla {@code minecraft:biome_source} registry, so that
+	 * {@code dimension} JSON can reference it via
+	 * {@code "biome_source": {"type":"endterraforged:end_biome_source"}}.
+	 *
+	 * <p>Unlike the density-function placeholder, the biome source codec is
+	 * fully self-contained — five explicit {@code Holder<Biome>} fields
+	 * resolved at DFU time, no Mixin late-binding needed. See
+	 * {@link EndBiomeSource} for the geometric ring-segmentation design.</p>
+	 */
+	private static void registerBiomeSources() {
+		Registry.register(BuiltInRegistries.BIOME_SOURCE,
+				location(EndBiomeSource.NAME), EndBiomeSource.CODEC);
+		LOGGER.debug("EndTerraForged: registered biome source {}",
+				EndBiomeSource.NAME);
 	}
 
 	public static ResourceLocation location(String name) {

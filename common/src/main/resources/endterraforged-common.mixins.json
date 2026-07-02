@@ -3,7 +3,10 @@
   "package": "endterraforged.mixin",
   "minVersion": "0.8",
   "compatibilityLevel": "JAVA_21",
-  "mixins": [],
+  "mixins": [
+    "endterraforged.mixin.MixinRandomState",
+    "endterraforged.mixin.MixinNoiseChunk"
+  ],
   "client": [],
   "injectors": {
     "defaultRequire": 1

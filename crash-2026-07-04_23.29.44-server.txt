@@ -1,0 +1,170 @@
+---- Minecraft Crash Report ----
+// I bet Cylons wouldn't have this problem.
+
+Time: 2026-07-04 23:29:44
+Description: Exception in server tick loop
+
+org.spongepowered.asm.mixin.transformer.throwables.MixinTransformerError: An unexpected critical error was encountered
+	at MC-BOOTSTRAP/org.spongepowered.mixin/org.spongepowered.asm.mixin.transformer.MixinProcessor.applyMixins(MixinProcessor.java:392) ~[sponge-mixin-0.15.2+mixin.0.8.7.jar:0.15.2+mixin.0.8.7] {}
+	at MC-BOOTSTRAP/org.spongepowered.mixin/org.spongepowered.asm.mixin.transformer.MixinTransformer.transformClass(MixinTransformer.java:250) ~[sponge-mixin-0.15.2+mixin.0.8.7.jar:0.15.2+mixin.0.8.7] {}
+	at MC-BOOTSTRAP/org.spongepowered.mixin/org.spongepowered.asm.service.modlauncher.MixinTransformationHandler.processClass(MixinTransformationHandler.java:131) ~[sponge-mixin-0.15.2+mixin.0.8.7.jar:0.15.2+mixin.0.8.7] {}
+	at MC-BOOTSTRAP/org.spongepowered.mixin/org.spongepowered.asm.launch.MixinLaunchPluginLegacy.processClass(MixinLaunchPluginLegacy.java:131) ~[sponge-mixin-0.15.2+mixin.0.8.7.jar:0.15.2+mixin.0.8.7] {}
+	at MC-BOOTSTRAP/cpw.mods.modlauncher@11.0.5/cpw.mods.modlauncher.serviceapi.ILaunchPluginService.processClassWithFlags(ILaunchPluginService.java:156) ~[modlauncher-11.0.5.jar:11.0.5+main.901c6ea8] {}
+	at MC-BOOTSTRAP/cpw.mods.modlauncher@11.0.5/cpw.mods.modlauncher.LaunchPluginHandler.offerClassNodeToPlugins(LaunchPluginHandler.java:94) ~[modlauncher-11.0.5.jar:?] {}
+	at MC-BOOTSTRAP/cpw.mods.modlauncher@11.0.5/cpw.mods.modlauncher.ClassTransformer.transform(ClassTransformer.java:120) ~[modlauncher-11.0.5.jar:?] {}
+	at MC-BOOTSTRAP/cpw.mods.modlauncher@11.0.5/cpw.mods.modlauncher.TransformingClassLoader.maybeTransformClassBytes(TransformingClassLoader.java:57) ~[modlauncher-11.0.5.jar:?] {}
+	at cpw.mods.securejarhandler/cpw.mods.cl.ModuleClassLoader.readerToClass(ModuleClassLoader.java:190) ~[securejarhandler-3.0.8.jar:?] {}
+	at cpw.mods.securejarhandler/cpw.mods.cl.ModuleClassLoader.lambda$findClass$20(ModuleClassLoader.java:298) ~[securejarhandler-3.0.8.jar:?] {}
+	at cpw.mods.securejarhandler/cpw.mods.cl.ModuleClassLoader.loadFromModule(ModuleClassLoader.java:311) ~[securejarhandler-3.0.8.jar:?] {}
+	at cpw.mods.securejarhandler/cpw.mods.cl.ModuleClassLoader.findClass(ModuleClassLoader.java:298) ~[securejarhandler-3.0.8.jar:?] {}
+	at cpw.mods.securejarhandler/cpw.mods.cl.ModuleClassLoader.loadClass(ModuleClassLoader.java:214) ~[securejarhandler-3.0.8.jar:?] {}
+	at java.base/java.lang.ClassLoader.loadClass(ClassLoader.java:526) ~[?:?] {}
+	at TRANSFORMER/minecraft@1.21.1/net.minecraft.server.level.ChunkMap.<init>(ChunkMap.java:172) ~[client-1.21.1-20240808.144430-srg.jar%23219!/:?] {re:mixin,pl:accesstransformer:B,re:classloading,pl:accesstransformer:B,pl:mixin:A}
+	at TRANSFORMER/minecraft@1.21.1/net.minecraft.server.level.ServerChunkCache.<init>(ServerChunkCache.java:88) ~[client-1.21.1-20240808.144430-srg.jar%23219!/:?] {re:mixin,pl:accesstransformer:B,re:classloading,pl:accesstransformer:B,pl:mixin:APP:lithium.mixins.json:minimal_nonvanilla.spawning.ServerChunkCacheMixin from mod lithium,pl:mixin:APP:lithium.mixins.json:world.chunk_access.ServerChunkCacheMixin from mod lithium,pl:mixin:A}
+	at TRANSFORMER/minecraft@1.21.1/net.minecraft.server.level.ServerLevel.<init>(ServerLevel.java:262) ~[client-1.21.1-20240808.144430-srg.jar%23219!/:?] {re:mixin,pl:accesstransformer:B,re:classloading,pl:accesstransformer:B,pl:mixin:APP:lithium.mixins.json:alloc.chunk_random.ServerLevelMixin from mod lithium,pl:mixin:APP:lithium.mixins.json:entity.inactive_navigations.ServerLevelMixin from mod lithium,pl:mixin:APP:lithium.mixins.json:minimal_nonvanilla.spawning.ServerLevelAccessor from mod lithium,pl:mixin:APP:lithium.mixins.json:util.accessors.ServerLevelAccessor from mod lithium,pl:mixin:APP:lithium.mixins.json:util.entity_movement_tracking.ServerLevelAccessor from mod lithium,pl:mixin:APP:lithium.mixins.json:world.block_entity_ticking.sleeping.ServerLevelMixin from mod lithium,pl:mixin:APP:acceleratedrecoiling.mixins.json:ServerLevelMixin from mod acceleratedrecoiling,pl:mixin:APP:modernfix-modernfix.mixins.json:perf.cache_strongholds.ServerLevelMixin from mod modernfix,pl:mixin:APP:immersive_optimization.mixins.json:ServerLevelAccessor from mod immersive_optimization,pl:mixin:APP:immersive_optimization.mixins.json:ServerLevelMixin from mod immersive_optimization,pl:mixin:A}
+	at TRANSFORMER/minecraft@1.21.1/net.minecraft.server.MinecraftServer.createLevels(MinecraftServer.java:367) ~[client-1.21.1-20240808.144430-srg.jar%23219!/:?] {re:mixin,pl:accesstransformer:B,re:classloading,pl:accesstransformer:B,pl:mixin:APP:modernfix-modernfix.mixins.json:perf.fix_loop_spin_waiting.MinecraftServerMixin from mod modernfix,pl:mixin:APP:mixins.malilib.json:server.MixinMinecraftServer from mod mafglib,pl:mixin:APP:alltheleaks.mixins.json:main.MinecraftServerMixin from mod alltheleaks,pl:mixin:APP:endterraforged-common.mixins.json:MixinMinecraftServer from mod endterraforged,pl:mixin:APP:modernfix-modernfix.mixins.json:perf.dedicated_reload_executor.MinecraftServerMixin from mod modernfix,pl:mixin:APP:modernfix-modernfix.mixins.json:core.MinecraftServerMixin from mod modernfix,pl:mixin:APP:immersive_optimization.mixins.json:MinecraftServerMixin from mod immersive_optimization,pl:mixin:A}
+	at TRANSFORMER/minecraft@1.21.1/net.minecraft.server.MinecraftServer.loadLevel(MinecraftServer.java:337) ~[client-1.21.1-20240808.144430-srg.jar%23219!/:?] {re:mixin,pl:accesstransformer:B,re:classloading,pl:accesstransformer:B,pl:mixin:APP:modernfix-modernfix.mixins.json:perf.fix_loop_spin_waiting.MinecraftServerMixin from mod modernfix,pl:mixin:APP:mixins.malilib.json:server.MixinMinecraftServer from mod mafglib,pl:mixin:APP:alltheleaks.mixins.json:main.MinecraftServerMixin from mod alltheleaks,pl:mixin:APP:endterraforged-common.mixins.json:MixinMinecraftServer from mod endterraforged,pl:mixin:APP:modernfix-modernfix.mixins.json:perf.dedicated_reload_executor.MinecraftServerMixin from mod modernfix,pl:mixin:APP:modernfix-modernfix.mixins.json:core.MinecraftServerMixin from mod modernfix,pl:mixin:APP:immersive_optimization.mixins.json:MinecraftServerMixin from mod immersive_optimization,pl:mixin:A}
+	at TRANSFORMER/minecraft@1.21.1/net.minecraft.client.server.IntegratedServer.initServer(IntegratedServer.java:77) ~[client-1.21.1-20240808.144430-srg.jar%23219!/:?] {re:mixin,pl:runtimedistcleaner:A,re:classloading,pl:mixin:APP:mixins.malilib.json:server.MixinIntegratedServer from mod mafglib,pl:mixin:APP:modernfix-modernfix.mixins.json:perf.thread_priorities.IntegratedServerMixin from mod modernfix,pl:mixin:A,pl:runtimedistcleaner:A}
+	at TRANSFORMER/minecraft@1.21.1/net.minecraft.server.MinecraftServer.runServer(MinecraftServer.java:670) ~[client-1.21.1-20240808.144430-srg.jar%23219!/:?] {re:mixin,pl:accesstransformer:B,re:classloading,pl:accesstransformer:B,pl:mixin:APP:modernfix-modernfix.mixins.json:perf.fix_loop_spin_waiting.MinecraftServerMixin from mod modernfix,pl:mixin:APP:mixins.malilib.json:server.MixinMinecraftServer from mod mafglib,pl:mixin:APP:alltheleaks.mixins.json:main.MinecraftServerMixin from mod alltheleaks,pl:mixin:APP:endterraforged-common.mixins.json:MixinMinecraftServer from mod endterraforged,pl:mixin:APP:modernfix-modernfix.mixins.json:perf.dedicated_reload_executor.MinecraftServerMixin from mod modernfix,pl:mixin:APP:modernfix-modernfix.mixins.json:core.MinecraftServerMixin from mod modernfix,pl:mixin:APP:immersive_optimization.mixins.json:MinecraftServerMixin from mod immersive_optimization,pl:mixin:A}
+	at TRANSFORMER/minecraft@1.21.1/net.minecraft.server.MinecraftServer.lambda$spin$2(MinecraftServer.java:267) ~[client-1.21.1-20240808.144430-srg.jar%23219!/:?] {re:mixin,pl:accesstransformer:B,re:classloading,pl:accesstransformer:B,pl:mixin:APP:modernfix-modernfix.mixins.json:perf.fix_loop_spin_waiting.MinecraftServerMixin from mod modernfix,pl:mixin:APP:mixins.malilib.json:server.MixinMinecraftServer from mod mafglib,pl:mixin:APP:alltheleaks.mixins.json:main.MinecraftServerMixin from mod alltheleaks,pl:mixin:APP:endterraforged-common.mixins.json:MixinMinecraftServer from mod endterraforged,pl:mixin:APP:modernfix-modernfix.mixins.json:perf.dedicated_reload_executor.MinecraftServerMixin from mod modernfix,pl:mixin:APP:modernfix-modernfix.mixins.json:core.MinecraftServerMixin from mod modernfix,pl:mixin:APP:immersive_optimization.mixins.json:MinecraftServerMixin from mod immersive_optimization,pl:mixin:A}
+	at java.base/java.lang.Thread.run(Thread.java:1583) [?:?] {re:mixin}
+Caused by: org.spongepowered.asm.mixin.throwables.MixinApplyError: Mixin [endterraforged-common.mixins.json:MixinRandomState from mod endterraforged] from phase [DEFAULT] in config [endterraforged-common.mixins.json] FAILED during APPLY
+	at MC-BOOTSTRAP/org.spongepowered.mixin/org.spongepowered.asm.mixin.transformer.MixinProcessor.handleMixinError(MixinProcessor.java:638) ~[sponge-mixin-0.15.2+mixin.0.8.7.jar:0.15.2+mixin.0.8.7] {}
+	at MC-BOOTSTRAP/org.spongepowered.mixin/org.spongepowered.asm.mixin.transformer.MixinProcessor.handleMixinApplyError(MixinProcessor.java:589) ~[sponge-mixin-0.15.2+mixin.0.8.7.jar:0.15.2+mixin.0.8.7] {}
+	at MC-BOOTSTRAP/org.spongepowered.mixin/org.spongepowered.asm.mixin.transformer.MixinProcessor.applyMixins(MixinProcessor.java:379) ~[sponge-mixin-0.15.2+mixin.0.8.7.jar:0.15.2+mixin.0.8.7] {}
+	... 22 more
+Caused by: org.spongepowered.asm.mixin.injection.throwables.InvalidInjectionException: Invalid descriptor on endterraforged-common.mixins.json:MixinRandomState from mod endterraforged->@Inject::endTerraForged$captureCreate(Lnet/minecraft/core/HolderGetter$Provider;Lnet/minecraft/resources/ResourceKey;JLorg/spongepowered/asm/mixin/injection/callback/CallbackInfo;)V! CallbackInfoReturnable is required! [INJECT_APPLY Applicator Phase -> endterraforged-common.mixins.json:MixinRandomState from mod endterraforged -> Apply Injections ->  -> Inject -> endterraforged-common.mixins.json:MixinRandomState from mod endterraforged->@Inject::endTerraForged$captureCreate(Lnet/minecraft/core/HolderGetter$Provider;Lnet/minecraft/resources/ResourceKey;JLorg/spongepowered/asm/mixin/injection/callback/CallbackInfo;)V]
+	at MC-BOOTSTRAP/org.spongepowered.mixin/org.spongepowered.asm.mixin.injection.callback.CallbackInjector.inject(CallbackInjector.java:552) ~[sponge-mixin-0.15.2+mixin.0.8.7.jar:0.15.2+mixin.0.8.7] {}
+	at MC-BOOTSTRAP/org.spongepowered.mixin/org.spongepowered.asm.mixin.injection.callback.CallbackInjector.inject(CallbackInjector.java:490) ~[sponge-mixin-0.15.2+mixin.0.8.7.jar:0.15.2+mixin.0.8.7] {}
+	at MC-BOOTSTRAP/org.spongepowered.mixin/org.spongepowered.asm.mixin.injection.code.Injector.inject(Injector.java:284) ~[sponge-mixin-0.15.2+mixin.0.8.7.jar:0.15.2+mixin.0.8.7] {}
+	at MC-BOOTSTRAP/org.spongepowered.mixin/org.spongepowered.asm.mixin.injection.struct.InjectionInfo.inject(InjectionInfo.java:508) ~[sponge-mixin-0.15.2+mixin.0.8.7.jar:0.15.2+mixin.0.8.7] {}
+	at MC-BOOTSTRAP/org.spongepowered.mixin/org.spongepowered.asm.mixin.transformer.MixinTargetContext.applyInjections(MixinTargetContext.java:1483) ~[sponge-mixin-0.15.2+mixin.0.8.7.jar:0.15.2+mixin.0.8.7] {}
+	at MC-BOOTSTRAP/org.spongepowered.mixin/org.spongepowered.asm.mixin.transformer.MixinApplicatorStandard.applyInjections(MixinApplicatorStandard.java:752) ~[sponge-mixin-0.15.2+mixin.0.8.7.jar:0.15.2+mixin.0.8.7] {}
+	at MC-BOOTSTRAP/org.spongepowered.mixin/org.spongepowered.asm.mixin.transformer.MixinApplicatorStandard.applyMixin(MixinApplicatorStandard.java:330) ~[sponge-mixin-0.15.2+mixin.0.8.7.jar:0.15.2+mixin.0.8.7] {}
+	at MC-BOOTSTRAP/org.spongepowered.mixin/org.spongepowered.asm.mixin.transformer.MixinApplicatorStandard.apply(MixinApplicatorStandard.java:246) ~[sponge-mixin-0.15.2+mixin.0.8.7.jar:0.15.2+mixin.0.8.7] {}
+	at MC-BOOTSTRAP/org.spongepowered.mixin/org.spongepowered.asm.mixin.transformer.TargetClassContext.apply(TargetClassContext.java:437) ~[sponge-mixin-0.15.2+mixin.0.8.7.jar:0.15.2+mixin.0.8.7] {}
+	at MC-BOOTSTRAP/org.spongepowered.mixin/org.spongepowered.asm.mixin.transformer.TargetClassContext.applyMixins(TargetClassContext.java:418) ~[sponge-mixin-0.15.2+mixin.0.8.7.jar:0.15.2+mixin.0.8.7] {}
+	at MC-BOOTSTRAP/org.spongepowered.mixin/org.spongepowered.asm.mixin.transformer.MixinProcessor.applyMixins(MixinProcessor.java:363) ~[sponge-mixin-0.15.2+mixin.0.8.7.jar:0.15.2+mixin.0.8.7] {}
+	... 22 more
+
+
+A detailed walkthrough of the error, its code path and all known details is as follows:
+---------------------------------------------------------------------------------------
+
+-- System Details --
+Details:
+	Minecraft Version: 1.21.1
+	Minecraft Version ID: 1.21.1
+	Operating System: Windows 11 (amd64) version 10.0
+	Java Version: 21.0.1, Azul Systems, Inc.
+	Java VM Version: OpenJDK 64-Bit Server VM (mixed mode, sharing), Azul Systems, Inc.
+	Memory: 560031368 bytes (534 MiB) / 1619001344 bytes (1544 MiB) up to 10737418240 bytes (10240 MiB)
+	CPUs: 12
+	Processor Vendor: GenuineIntel
+	Processor Name: 12th Gen Intel(R) Core(TM) i5-12490F
+	Identifier: Intel64 Family 6 Model 151 Stepping 2
+	Microarchitecture: Alder Lake
+	Frequency (GHz): 3.00
+	Number of physical packages: 1
+	Number of physical CPUs: 6
+	Number of logical CPUs: 12
+	Graphics card #0 name: NVIDIA GeForce RTX 5070 Ti
+	Graphics card #0 vendor: NVIDIA
+	Graphics card #0 VRAM (MiB): 16303.00
+	Graphics card #0 deviceId: VideoController1
+	Graphics card #0 versionInfo: 32.0.15.9186
+	Memory slot #0 capacity (MiB): 32768.00
+	Memory slot #0 clockSpeed (GHz): 3.20
+	Memory slot #0 type: DDR4
+	Memory slot #1 capacity (MiB): 32768.00
+	Memory slot #1 clockSpeed (GHz): 3.20
+	Memory slot #1 type: DDR4
+	Virtual memory max (MiB): 71775.28
+	Virtual memory used (MiB): 50880.96
+	Swap memory total (MiB): 6400.00
+	Swap memory used (MiB): 112.43
+	Space in storage for jna.tmpdir (MiB): available: 190520.86, total: 511294.00
+	Space in storage for org.lwjgl.system.SharedLibraryExtractPath (MiB): available: 190520.86, total: 511294.00
+	Space in storage for io.netty.native.workdir (MiB): available: 190520.86, total: 511294.00
+	Space in storage for java.io.tmpdir (MiB): available: 190520.86, total: 511294.00
+	Space in storage for workdir (MiB): available: 394073.81, total: 1190811.00
+	JVM Flags: 6 total; -XX:+UseG1GC -XX:-UseAdaptiveSizePolicy -XX:-OmitStackTraceInFastThrow -XX:HeapDumpPath=MojangTricksIntelDriversForPerformance_javaw.exe_minecraft.exe.heapdump -Xmn1536m -Xmx10240m
+	Loaded Shaderpack: (off)
+	Server Running: true
+	Player Count: 0 / 8; []
+	Active Data Packs: vanilla, mod_data, mod/sodium, mod/smsn (incompatible), mod/chunkloadingprofiler (incompatible), mod/fabric_api_base, mod/fabric_renderer_api_v1, mod/sodium_extra, mod/mafglib,malilib, mod/fastboot (incompatible), mod/customskinloader (incompatible), mod/alltheleaks, mod/lithium, mod/reeses_sodium_options, mod/acceleratedrecoiling, mod/endterraforged (incompatible), mod/neoforge, mod/modernfix (incompatible), mod/immersive_optimization (incompatible), mod/fabric_block_view_api_v2, mod/krypton_fnp (incompatible), mod/configured (incompatible), mod/iris, mod/immediatelyfast (incompatible), mod/dlc_manager (incompatible), mod/architectury (incompatible), mod/ferritecore (incompatible), mod/modernui (incompatible), mod/lanserverproperties, mod/gnetum (incompatible), mod/fabric_rendering_data_attachment_v1, mod/quick_pack, mod/fabric_networking_api_v1, mod/cloth_config (incompatible), mod/ruokmod (incompatible), mod/oworld2create (incompatible), mod/ldlib2, mod/opack2reload (incompatible), mod/gpu_tape (incompatible), mafglib:runtime
+	Available Data Packs: bundle, trade_rebalance, vanilla, mod/acceleratedrecoiling, mod/alltheleaks, mod/architectury (incompatible), mod/chunkloadingprofiler (incompatible), mod/cloth_config (incompatible), mod/configured (incompatible), mod/customskinloader (incompatible), mod/dlc_manager (incompatible), mod/endterraforged (incompatible), mod/fabric_api_base, mod/fabric_block_view_api_v2, mod/fabric_networking_api_v1, mod/fabric_renderer_api_v1, mod/fabric_rendering_data_attachment_v1, mod/fastboot (incompatible), mod/ferritecore (incompatible), mod/gnetum (incompatible), mod/gpu_tape (incompatible), mod/immediatelyfast (incompatible), mod/immersive_optimization (incompatible), mod/iris, mod/krypton_fnp (incompatible), mod/lanserverproperties, mod/ldlib2, mod/lithium, mod/mafglib,malilib, mod/modernfix (incompatible), mod/modernui (incompatible), mod/neoforge, mod/opack2reload (incompatible), mod/oworld2create (incompatible), mod/quick_pack, mod/reeses_sodium_options, mod/ruokmod (incompatible), mod/smsn (incompatible), mod/sodium, mod/sodium_extra, mod_data, mafglib:runtime
+	Enabled Feature Flags: minecraft:vanilla
+	World Generation: Experimental
+	World Seed: 8423687481667263626
+	Type: Integrated Server (map_client.txt)
+	Is Modded: Definitely; Client brand changed to 'neoforge'; Server brand changed to 'neoforge'
+	Launched Version: RTF测试
+	ModLauncher: 11.0.5+main.901c6ea8
+	ModLauncher launch target: forgeclient
+	ModLauncher services: 
+		sponge-mixin-0.15.2+mixin.0.8.7.jar mixin PLUGINSERVICE 
+		loader-4.0.42.jar slf4jfixer PLUGINSERVICE 
+		loader-4.0.42.jar runtime_enum_extender PLUGINSERVICE 
+		at-modlauncher-10.0.1.jar accesstransformer PLUGINSERVICE 
+		loader-4.0.42.jar runtimedistcleaner PLUGINSERVICE 
+		modlauncher-11.0.5.jar mixin TRANSFORMATIONSERVICE 
+		modlauncher-11.0.5.jar fml TRANSFORMATIONSERVICE 
+	FML Language Providers: 
+		javafml@4.0
+		lowcodefml@4.0
+		minecraft@4.0
+	Mod List: 
+		0Pack2Reload-NeoForge-1.21.1-1.0.1.jar            |0Pack2Reload                  |opack2reload                  |1.21.1-1.0.1        |Manifest: NOSIGNATURE
+		0world2create-neoforge-1.21.1-1.0.0.jar           |0World2Create                 |oworld2create                 |1.0.0               |Manifest: NOSIGNATURE
+		acceleratedrecoiling-21.1.11-alpha-hotfix.jar     |AcceleratedRecoiling          |acceleratedrecoiling          |21.1.11-alpha-hotfix|Manifest: NOSIGNATURE
+		alltheleaks-1.1.7+1.21.1-neoforge.jar             |All The Leaks                 |alltheleaks                   |1.1.7+1.21.1-neoforg|Manifest: NOSIGNATURE
+		architectury-13.0.8-neoforge.jar                  |Architectury                  |architectury                  |13.0.8              |Manifest: NOSIGNATURE
+		chunkloadingprofiler-1.21.1+0.0.6.jar             |Chunk Loading Profiler        |chunkloadingprofiler          |1.21.1+0.0.6        |Manifest: NOSIGNATURE
+		cloth-config-15.0.140-neoforge.jar                |Cloth Config v15 API          |cloth_config                  |15.0.140            |Manifest: NOSIGNATURE
+		configured-neoforge-1.21.1-2.6.3.jar              |Configured                    |configured                    |2.6.3               |Manifest: 0d:78:5f:44:c0:47:0c:8c:e2:63:a3:04:43:d4:12:7d:b0:7c:35:37:dc:40:b1:c1:98:ec:51:eb:3b:3c:45:99
+		CustomSkinLoader_Universal-14.28.jar              |CustomSkinLoader              |customskinloader              |14.28               |Manifest: 4a:31:8b:cf:34:eb:d0:13:f3:19:39:d5:d2:b9:12:78:b5:f2:8d:91:3e:6f:8f:ed:97:48:00:69:e1:30:3a:54
+		DLC-Manager-neoforge-1.21.1-3.7.2.jar             |DLC Manager                   |dlc_manager                   |3.7.2               |Manifest: NOSIGNATURE
+		endterraforged-0.1.6-neoforge-1.21.1.jar          |EndTerraForged                |endterraforged                |0.1.6               |Manifest: NOSIGNATURE
+		fastboot-1.21.x-v1.3neo.jar                       |FastBoot                      |fastboot                      |1.3.0               |Manifest: NOSIGNATURE
+		ferritecore-7.0.3-neoforge.jar                    |Ferrite Core                  |ferritecore                   |7.0.3               |Manifest: 41:ce:50:66:d1:a0:05:ce:a1:0e:02:85:9b:46:64:e0:bf:2e:cf:60:30:9a:fe:0c:27:e0:63:66:9a:84:ce:8a
+		fabric-api-base-0.4.42+d1308ded19.jar             |Forgified Fabric API Base(Thin|fabric_api_base               |0.4.42+d1308ded19   |Manifest: NOSIGNATURE
+		fabric-block-view-api-v2-1.0.10+9afaaf8c19.jar    |Forgified Fabric BlockView API|fabric_block_view_api_v2      |1.0.10+9afaaf8c19   |Manifest: NOSIGNATURE
+		fabric-networking-api-v1-4.3.0+6db6dff919.jar     |Forgified Fabric Networking AP|fabric_networking_api_v1      |4.3.0+6db6dff919    |Manifest: NOSIGNATURE
+		fabric-renderer-api-v1-3.4.0+acb05a3919.jar       |Forgified Fabric Renderer API |fabric_renderer_api_v1        |3.4.0+acb05a3919    |Manifest: NOSIGNATURE
+		fabric-rendering-data-attachment-v1-0.3.48+73761d2|Forgified Fabric Rendering Dat|fabric_rendering_data_attachme|0.3.48+73761d2e19   |Manifest: NOSIGNATURE
+		gnetum-3.3.1.jar                                  |Gnetum                        |gnetum                        |3.3.1               |Manifest: NOSIGNATURE
+		GPUTape-1.20.6-1.21x-1.0.3.jar                    |GPUTape                       |gpu_tape                      |1.0.2               |Manifest: NOSIGNATURE
+		ImmediatelyFast-NeoForge-1.6.10+1.21.1.jar        |ImmediatelyFast               |immediatelyfast               |1.6.10+1.21.1       |Manifest: NOSIGNATURE
+		immersive_optimization-neoforge-1.21-0.1.4.jar    |Immersive Optimization        |immersive_optimization        |0.1.4               |Manifest: NOSIGNATURE
+		iris-neoforge-1.8.12+mc1.21.1.jar                 |Iris                          |iris                          |1.8.12-snapshot+mc1.|Manifest: NOSIGNATURE
+		krypton_fnp-neoforge-1.21.1-0.2.28.1-1.21.1.jar   |Krypton FNP                   |krypton_fnp                   |0.2.28.1-1.21.1     |Manifest: NOSIGNATURE
+		lanserverproperties-1.13.2-neoforge.jar           |Lan Server Properties         |lanserverproperties           |1.13.2              |Manifest: NOSIGNATURE
+		lithium-neoforge-0.15.3+mc1.21.1.jar              |Lithium                       |lithium                       |0.15.3+mc1.21.1     |Manifest: NOSIGNATURE
+		ldlib2-neoforge-1.21.1-2.2.27-all.jar             |LowDragLib2=2.2.26.b          |ldlib2                        |2.2.27              |Manifest: NOSIGNATURE
+		mafglib-0.4.3+mc1.21.1.jar                        |MaFgLib                       |mafglib                       |0.4.3+mc1.21.1      |Manifest: NOSIGNATURE
+		client-1.21.1-20240808.144430-srg.jar             |Minecraft                     |minecraft                     |1.21.1              |Manifest: a1:d4:5e:04:4f:d3:d6:e0:7b:37:97:cf:77:b0:de:ad:4a:47:ce:8c:96:49:5f:0a:cf:8c:ae:b2:6d:4b:8a:3f
+		ModernUI-NeoForge-1.21.1-3.12.0.2-universal.jar   |Modern UI                     |modernui                      |3.12.0.2            |Manifest: 01:c4:52:25:b1:6e:5f:ac:fe:88:35:7e:cf:65:2f:69:1d:56:db:2b:93:f8:dd:7c:93:47:04:8c:e4:22:13:91
+		modernfix-neoforge-5.26.1+mc1.21.1.jar            |ModernFix                     |modernfix                     |5.26.1+mc1.21.1     |Manifest: NOSIGNATURE
+		neoforge-21.1.224-universal.jar                   |NeoForge                      |neoforge                      |21.1.224            |Manifest: NOSIGNATURE
+		quick-pack-neoforge-1.2.0+1.21.10.jar             |quick-pack                    |quick_pack                    |1.2.0               |Manifest: NOSIGNATURE
+		reeses-sodium-options-neoforge-1.8.3+mc1.21.4.jar |Reese's Sodium Options        |reeses_sodium_options         |1.8.3+mc1.21.4      |Manifest: NOSIGNATURE
+		ruok-neoforge_1.21.1_Pre-Release_5-1.7.4.jar      |RuOK Mod                      |ruokmod                       |1.7.4               |Manifest: NOSIGNATURE
+		smsn-neoforge-1.3.9-1.21.1.jar                    |Save My Shit Network          |smsn                          |1.3.9-1.21.1        |Manifest: NOSIGNATURE
+		sodium-neoforge-0.6.13+mc1.21.1.jar               |Sodium                        |sodium                        |0.6.13+mc1.21.1     |Manifest: NOSIGNATURE
+		sodium-extra-neoforge-0.6.0+mc1.21.1.jar          |Sodium Extra                  |sodium_extra                  |0.6.0+mc1.21.1      |Manifest: NOSIGNATURE
+	Crash Report UUID: 98481b70-f42d-4dd9-a17c-4fce50d2aee0
+	FML: 4.0.42
+	NeoForge: 21.1.224
+	Fragments: Back Stack Index: 0
+FragmentManager misc state:
+  mHost=icyllis.modernui.mc.UIManager$HostCallbacks@302fca7e
+  mContainer=icyllis.modernui.mc.UIManager$HostCallbacks@302fca7e
+  mCurState=7 mStateSaved=false mStopped=false mDestroyed=false
+
+	AllTheLeaks: 
+		Events:
+		  Client Level Updates: 1
+		  Client Player Logout: 1
+		Explicit GC Last Run: 3ms ago
+		Leaking objects:

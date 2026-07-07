@@ -1,0 +1,17 @@
+{
+  "required": true,
+  "package": "endterraforged.mixin",
+  "minVersion": "0.8",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": [
+    "MixinRandomState",
+    "MixinNoiseChunk",
+    "MixinMinecraftServer"
+  ],
+  "client": [
+    "MixinPresetEditor"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

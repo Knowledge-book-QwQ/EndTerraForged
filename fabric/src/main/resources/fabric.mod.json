@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "id": "endterraforged",
+  "version": "${version}",
+  "name": "EndTerraForged",
+  "description": "An End-dimension terrain worldgen mod inspired by ReTerraForged.",
+  "authors": [
+    "Knowledge-book-QwQ"
+  ],
+  "contact": {
+    "repo": "https://github.com/Knowledge-book-QwQ/EndTerraForged",
+    "issues": "https://github.com/Knowledge-book-QwQ/EndTerraForged/issues"
+  },
+  "license": "LGPL-3.0-or-later",
+  "environment": "*",
+  "entrypoints": {
+    "main": [
+      "endterraforged.fabric.EndTerraForgedFabric"
+    ]
+  },
+  "depends": {
+    "fabricloader": ">=0.14.14",
+    "fabric": ">=0.86.1",
+    "minecraft": ">=1.21.1"
+  },
+  "mixins": [
+    "endterraforged-common.mixins.json",
+    "endterraforged-fabric.mixins.json"
+  ]
+}

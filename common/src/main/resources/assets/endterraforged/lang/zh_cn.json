@@ -1,0 +1,25 @@
+{
+  "endterraforged.metadata.description": "EndTerraForged 世界生成数据包",
+
+  "endterraforged.gui.preset_editor.title": "EndTerraForged 预设编辑器",
+  "endterraforged.gui.world_height": "世界高度",
+  "endterraforged.gui.min_y": "最低 Y",
+  "endterraforged.gui.sea_level_y": "海平面 Y",
+  "endterraforged.gui.island_baseline_y": "岛屿基线 Y",
+  "endterraforged.gui.sea_mode": "海洋模式",
+  "endterraforged.gui.topology_mode": "拓扑模式",
+  "endterraforged.gui.floating_islands": "浮岛",
+  "endterraforged.gui.floating_islands.on": "开",
+  "endterraforged.gui.floating_islands.off": "关",
+  "endterraforged.gui.done": "完成",
+  "endterraforged.gui.open_editor": "EndTerraForged 预设...",
+
+  "endterraforged.gui.erosion.open": "侵蚀设置...",
+  "endterraforged.gui.erosion_editor.title": "侵蚀配置编辑器",
+  "endterraforged.gui.erosion.droplets_per_chunk": "每区块水滴数",
+  "endterraforged.gui.erosion.droplet_lifetime": "水滴寿命",
+  "endterraforged.gui.erosion.droplet_volume": "水滴容量",
+  "endterraforged.gui.erosion.droplet_velocity": "水滴速度",
+  "endterraforged.gui.erosion.erosion_rate": "侵蚀速率",
+  "endterraforged.gui.erosion.deposit_rate": "沉积速率"
+}

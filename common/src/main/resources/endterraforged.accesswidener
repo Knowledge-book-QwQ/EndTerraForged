@@ -1,0 +1,10 @@
+accessWidener v1 named
+# Stage 5.2.2: SurfaceRules.Context.blockX/blockZ are package-private; our
+# custom ClimateTemperatureCondition / ClimateMoistureCondition live in
+# endterraforged.world.level.levelgen and need to read the current block
+# coordinates to sample EndClimate at the correct position.
+# SurfaceRules.Condition is also package-private — needed as the return
+# type of ConditionSource.apply(Context).
+accessible class net/minecraft/world/level/levelgen/SurfaceRules$Condition
+accessible field net/minecraft/world/level/levelgen/SurfaceRules$Context blockX I
+accessible field net/minecraft/world/level/levelgen/SurfaceRules$Context blockZ I

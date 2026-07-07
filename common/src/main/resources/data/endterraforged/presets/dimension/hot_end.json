@@ -1,0 +1,97 @@
+{
+  "_comment": "EndTerraForged stage 5.2.3 sample preset — Infernal End. Mixes hot overworld biomes (desert, badlands, eroded_badlands, savanna) with nether hot biomes (nether_wastes, basalt_deltas, crimson_forest, warped_forest) across all four outer rings. EndClimate temperature 0.5-1.0 selects these variants.",
+  "type": "minecraft:the_end",
+  "generator": {
+    "type": "minecraft:noise",
+    "settings": "minecraft:the_end",
+    "biome_source": {
+      "type": "endterraforged:end_biome_source",
+      "end": "minecraft:the_end",
+      "highlands": "minecraft:desert",
+      "midlands": "minecraft:badlands",
+      "islands": "minecraft:basalt_deltas",
+      "barrens": "minecraft:nether_wastes",
+      "biome_climate": {
+        "highlands": {
+          "variants": [
+            {
+              "biome": "minecraft:badlands",
+              "temperature_min": 0.6,
+              "temperature_max": 1.0,
+              "moisture_min": 0.0,
+              "moisture_max": 0.3
+            },
+            {
+              "biome": "minecraft:eroded_badlands",
+              "temperature_min": 0.7,
+              "temperature_max": 1.0,
+              "moisture_min": 0.0,
+              "moisture_max": 0.4
+            },
+            {
+              "biome": "minecraft:crimson_forest",
+              "temperature_min": 0.6,
+              "temperature_max": 0.9,
+              "moisture_min": 0.3,
+              "moisture_max": 0.8
+            }
+          ]
+        },
+        "midlands": {
+          "variants": [
+            {
+              "biome": "minecraft:desert",
+              "temperature_min": 0.6,
+              "temperature_max": 1.0,
+              "moisture_min": 0.0,
+              "moisture_max": 0.3
+            },
+            {
+              "biome": "minecraft:savanna",
+              "temperature_min": 0.5,
+              "temperature_max": 0.9,
+              "moisture_min": 0.0,
+              "moisture_max": 0.4
+            }
+          ]
+        },
+        "islands": {
+          "variants": [
+            {
+              "biome": "minecraft:basalt_deltas",
+              "temperature_min": 0.7,
+              "temperature_max": 1.0,
+              "moisture_min": 0.0,
+              "moisture_max": 0.4
+            },
+            {
+              "biome": "minecraft:nether_wastes",
+              "temperature_min": 0.6,
+              "temperature_max": 1.0,
+              "moisture_min": 0.0,
+              "moisture_max": 0.5
+            }
+          ]
+        },
+        "barrens": {
+          "variants": [
+            {
+              "biome": "minecraft:nether_wastes",
+              "temperature_min": 0.6,
+              "temperature_max": 1.0,
+              "moisture_min": 0.0,
+              "moisture_max": 0.5
+            },
+            {
+              "biome": "minecraft:warped_forest",
+              "temperature_min": 0.5,
+              "temperature_max": 0.8,
+              "moisture_min": 0.2,
+              "moisture_max": 0.6
+            }
+          ]
+        }
+      }
+    }
+  }
+}

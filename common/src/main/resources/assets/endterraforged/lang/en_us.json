@@ -1,0 +1,25 @@
+{
+  "endterraforged.metadata.description": "EndTerraForged worldgen data",
+
+  "endterraforged.gui.preset_editor.title": "EndTerraForged Preset Editor",
+  "endterraforged.gui.world_height": "World Height",
+  "endterraforged.gui.min_y": "Min Y",
+  "endterraforged.gui.sea_level_y": "Sea Level Y",
+  "endterraforged.gui.island_baseline_y": "Island Baseline Y",
+  "endterraforged.gui.sea_mode": "Sea Mode",
+  "endterraforged.gui.topology_mode": "Topology Mode",
+  "endterraforged.gui.floating_islands": "Floating Islands",
+  "endterraforged.gui.floating_islands.on": "On",
+  "endterraforged.gui.floating_islands.off": "Off",
+  "endterraforged.gui.done": "Done",
+  "endterraforged.gui.open_editor": "EndTerraForged Preset...",
+
+  "endterraforged.gui.erosion.open": "Erosion...",
+  "endterraforged.gui.erosion_editor.title": "Erosion Config Editor",
+  "endterraforged.gui.erosion.droplets_per_chunk": "Droplets per Chunk",
+  "endterraforged.gui.erosion.droplet_lifetime": "Droplet Lifetime",
+  "endterraforged.gui.erosion.droplet_volume": "Droplet Volume",
+  "endterraforged.gui.erosion.droplet_velocity": "Droplet Velocity",
+  "endterraforged.gui.erosion.erosion_rate": "Erosion Rate",
+  "endterraforged.gui.erosion.deposit_rate": "Deposit Rate"
+}

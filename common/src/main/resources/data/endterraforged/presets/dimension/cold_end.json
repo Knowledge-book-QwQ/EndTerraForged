@@ -1,0 +1,79 @@
+{
+  "_comment": "EndTerraForged stage 5.2.3 sample preset — Frostbound End. Mixes cold overworld biomes (ice_spikes, snowy_plains, snowy_taiga, frozen_peaks) with nether cold biomes (soul_sand_valley, basalt_deltas) across the highlands/midlands/barrens rings. Climate ranges select variants by EndClimate temperature/moisture channels (temperature: 0=cold rim, 1=hot origin).",
+  "type": "minecraft:the_end",
+  "generator": {
+    "type": "minecraft:noise",
+    "settings": "minecraft:the_end",
+    "biome_source": {
+      "type": "endterraforged:end_biome_source",
+      "end": "minecraft:the_end",
+      "highlands": "minecraft:snowy_plains",
+      "midlands": "minecraft:ice_spikes",
+      "islands": "minecraft:snowy_taiga",
+      "barrens": "minecraft:snowy_beach",
+      "biome_climate": {
+        "highlands": {
+          "variants": [
+            {
+              "biome": "minecraft:ice_spikes",
+              "temperature_min": 0.0,
+              "temperature_max": 0.2,
+              "moisture_min": 0.6,
+              "moisture_max": 1.0
+            },
+            {
+              "biome": "minecraft:snowy_taiga",
+              "temperature_min": 0.0,
+              "temperature_max": 0.3,
+              "moisture_min": 0.0,
+              "moisture_max": 0.6
+            },
+            {
+              "biome": "minecraft:soul_sand_valley",
+              "temperature_min": 0.0,
+              "temperature_max": 0.4,
+              "moisture_min": 0.0,
+              "moisture_max": 0.4
+            }
+          ]
+        },
+        "midlands": {
+          "variants": [
+            {
+              "biome": "minecraft:frozen_peaks",
+              "temperature_min": 0.0,
+              "temperature_max": 0.2,
+              "moisture_min": 0.0,
+              "moisture_max": 0.5
+            },
+            {
+              "biome": "minecraft:snowy_beach",
+              "temperature_min": 0.0,
+              "temperature_max": 0.3,
+              "moisture_min": 0.3,
+              "moisture_max": 0.7
+            }
+          ]
+        },
+        "barrens": {
+          "variants": [
+            {
+              "biome": "minecraft:snowy_plains",
+              "temperature_min": 0.0,
+              "temperature_max": 0.3,
+              "moisture_min": 0.0,
+              "moisture_max": 0.5
+            },
+            {
+              "biome": "minecraft:basalt_deltas",
+              "temperature_min": 0.0,
+              "temperature_max": 0.2,
+              "moisture_min": 0.0,
+              "moisture_max": 0.3
+            }
+          ]
+        }
+      }
+    }
+  }
+}

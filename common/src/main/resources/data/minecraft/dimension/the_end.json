@@ -1,0 +1,15 @@
+{
+  "type": "minecraft:the_end",
+  "generator": {
+    "type": "minecraft:noise",
+    "settings": "minecraft:the_end",
+    "biome_source": {
+      "type": "endterraforged:end_biome_source",
+      "end": "minecraft:the_end",
+      "highlands": "minecraft:end_highlands",
+      "midlands": "minecraft:end_midlands",
+      "islands": "minecraft:small_end_islands",
+      "barrens": "minecraft:end_barrens"
+    }
+  }
+}

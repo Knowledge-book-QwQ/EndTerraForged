@@ -1,0 +1,79 @@
+{
+  "_comment": "EndTerraForged stage 5.2.3 sample preset — Verdant End. Mixes temperate overworld biomes (forest, plains, birch_forest, swamp, jungle, mangrove_swamp, dark_forest, beach) with nether temperate biomes (warped_forest, crimson_forest) across highlands/midlands/islands rings. EndClimate temperature 0.3-0.7 selects these variants.",
+  "type": "minecraft:the_end",
+  "generator": {
+    "type": "minecraft:noise",
+    "settings": "minecraft:the_end",
+    "biome_source": {
+      "type": "endterraforged:end_biome_source",
+      "end": "minecraft:the_end",
+      "highlands": "minecraft:forest",
+      "midlands": "minecraft:plains",
+      "islands": "minecraft:birch_forest",
+      "barrens": "minecraft:savanna",
+      "biome_climate": {
+        "highlands": {
+          "variants": [
+            {
+              "biome": "minecraft:mangrove_swamp",
+              "temperature_min": 0.4,
+              "temperature_max": 0.7,
+              "moisture_min": 0.7,
+              "moisture_max": 1.0
+            },
+            {
+              "biome": "minecraft:dark_forest",
+              "temperature_min": 0.3,
+              "temperature_max": 0.6,
+              "moisture_min": 0.4,
+              "moisture_max": 0.9
+            },
+            {
+              "biome": "minecraft:warped_forest",
+              "temperature_min": 0.4,
+              "temperature_max": 0.6,
+              "moisture_min": 0.3,
+              "moisture_max": 0.7
+            }
+          ]
+        },
+        "midlands": {
+          "variants": [
+            {
+              "biome": "minecraft:swamp",
+              "temperature_min": 0.5,
+              "temperature_max": 0.7,
+              "moisture_min": 0.6,
+              "moisture_max": 1.0
+            },
+            {
+              "biome": "minecraft:jungle",
+              "temperature_min": 0.6,
+              "temperature_max": 0.9,
+              "moisture_min": 0.5,
+              "moisture_max": 1.0
+            }
+          ]
+        },
+        "islands": {
+          "variants": [
+            {
+              "biome": "minecraft:beach",
+              "temperature_min": 0.3,
+              "temperature_max": 0.7,
+              "moisture_min": 0.2,
+              "moisture_max": 0.6
+            },
+            {
+              "biome": "minecraft:crimson_forest",
+              "temperature_min": 0.4,
+              "temperature_max": 0.6,
+              "moisture_min": 0.4,
+              "moisture_max": 0.8
+            }
+          ]
+        }
+      }
+    }
+  }
+}

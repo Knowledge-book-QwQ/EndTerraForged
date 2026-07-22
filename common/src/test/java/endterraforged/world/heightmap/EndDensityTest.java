@@ -1,13 +1,33 @@
 package endterraforged.world.heightmap;
 
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+
 import org.junit.jupiter.api.Test;
 
+import endterraforged.world.climate.ClimateModulator;
+import endterraforged.world.climate.EndClimate;
+import endterraforged.world.config.AbyssPitConfig;
+import endterraforged.world.config.CaveChamberConfig;
+import endterraforged.world.config.CaveNetworkConfig;
+import endterraforged.world.config.CaveSystemConfig;
+import endterraforged.world.config.CaveTunnelConfig;
+import endterraforged.world.config.ContinentAlgorithm;
+import endterraforged.world.config.ContinentConfigBuilder;
+import endterraforged.world.config.ContinentConfig;
+import endterraforged.world.config.EndPreset;
+import endterraforged.world.config.EndPresetBuilder;
 import endterraforged.world.config.SeaMode;
+import endterraforged.world.config.SubsurfaceConfig;
 import endterraforged.world.config.TestProfile;
 import endterraforged.world.config.TopologyMode;
+import endterraforged.world.lake.EndLakeMap;
+import endterraforged.world.river.EndRiverMap;
 
 /**
  * Contract tests for {@link EndDensity}: the 3D solid/void column decision
@@ -44,6 +64,38 @@ class EndDensityTest {
         throw new AssertionError("no solid sample with terrain above surface found");
     }
 
+    private static int findAbyssSample(EndHeightmap map, EndSubsurface subsurface) {
+        for (int i = 0; i < SAMPLES; i++) {
+            float landness = map.getLandness(x(i), z(i), SEED);
+            float height = map.getHeight(x(i), z(i), SEED);
+            if (landness > 0.5F && height > map.levels().surface + 0.05F
+                    && subsurface.abyssStrength(x(i), z(i), landness) > 0.9F) {
+                return i;
+            }
+        }
+        throw new AssertionError("no abyss sample with terrain above surface found");
+    }
+
+    private static CaveSample findCaveSample(EndHeightmap map, EndSubsurface subsurface) {
+        for (int i = 0; i < SAMPLES * 3; i++) {
+            float landness = map.getLandness(x(i), z(i), SEED);
+            float height = map.getHeight(x(i), z(i), SEED);
+            if (landness <= 0.5F || height <= map.levels().surface + 0.2F) {
+                continue;
+            }
+            int topY = map.levels().scale(height);
+            for (int depth = 160; depth <= 720; depth += 32) {
+                int y = topY - depth;
+                float yNorm = map.levels().scale(y);
+                if (subsurface.caveStrength(x(i), z(i), landness,
+                        yNorm, height, map.levels().worldHeight) >= 0.35F) {
+                    return new CaveSample(i, y);
+                }
+            }
+        }
+        throw new AssertionError("no cave sample with terrain above surface found");
+    }
+
     // ----- output contract ------------------------------------------------
 
     @Test
@@ -77,6 +129,279 @@ class EndDensityTest {
             float a = density.density(x(i), y, z(i), SEED);
             float b = density.density(x(i), y, z(i), SEED);
             assertEquals(a, b, 0.0F, "same args should yield same density");
+        }
+    }
+
+    @Test
+    void parallelSamplingMatchesSequentialReference() throws Exception {
+        EndHeightmap map = new EndHeightmap(EndPreset.defaults(), SEED)
+                .withClimate(ClimateModulator.defaults(EndClimate.defaults(SEED)))
+                .withRivers(EndRiverMap.defaults())
+                .withLakes(EndLakeMap.defaults());
+        EndDensity density = new EndDensity(map, caveSubsurface());
+        int sampleCount = 512;
+        int workerCount = 4;
+        int[] sequential = new int[sampleCount];
+        int[] parallel = new int[sampleCount];
+        int solidSamples = 0;
+
+        for (int sample = 0; sample < sampleCount; sample++) {
+            sequential[sample] = defaultOuterShelfDensityBits(density, sample);
+            if (sequential[sample] != 0) {
+                solidSamples++;
+            }
+        }
+        assertTrue(solidSamples > 0, "the concurrent reference must include active shelf columns");
+
+        try (ExecutorService workers = Executors.newFixedThreadPool(workerCount)) {
+            Future<?>[] futures = new Future<?>[workerCount];
+            for (int worker = 0; worker < workerCount; worker++) {
+                int firstSample = worker;
+                futures[worker] = workers.submit(() -> {
+                    for (int sample = firstSample; sample < sampleCount; sample += workerCount) {
+                        parallel[sample] = defaultOuterShelfDensityBits(density, sample);
+                    }
+                });
+            }
+            for (Future<?> future : futures) {
+                future.get();
+            }
+        }
+
+        assertArrayEquals(sequential, parallel,
+                "parallel density sampling must match the sequential reference bit-for-bit");
+    }
+
+    @Test
+    void cachedColumnsMatchUncachedSamplingAcrossInterleavedColumnsAndSeeds() {
+        TestProfile profile = new TestProfile(4064, -2032, 0, 0,
+                SeaMode.WITH_FLOOR, TopologyMode.CONTINENTAL_SHATTERED, false);
+        EndHeightmap map = new EndHeightmap(profile, SEED);
+        EndSubsurface subsurface = caveSubsurface();
+        EndDensity density = new EndDensity(map, subsurface);
+
+        for (int sample = 0; sample < 24; sample++) {
+            int index = (sample * 37) % SAMPLES;
+            int seed = sample % 2 == 0 ? SEED : SEED + 101;
+            if (map.getLandness(x(index), z(index), seed) <= 0.0F) {
+                continue;
+            }
+            int oceanFloorY = density.oceanFloorY(x(index), z(index), seed);
+            for (int y = -256; y <= 1536; y += 97) {
+                if (map.seaMode().hasFloor() && y <= oceanFloorY) {
+                    continue;
+                }
+                assertEquals(uncachedDensity(map, subsurface, x(index), y, z(index), seed),
+                        density.density(x(index), y, z(index), seed), 0.0F,
+                        "cached density must match uncached sampling at sample=" + sample + ", y=" + y);
+            }
+        }
+    }
+
+    @Test
+    void sharedWorkerCacheInvalidatesWhenDensityRuntimeChanges() {
+        EndHeightmap shelfMap = new EndHeightmap(EndPreset.defaults(), SEED);
+        EndDensity shelf = new EndDensity(shelfMap);
+        TestProfile legacyProfile = new TestProfile(512, -256, 0, 0,
+                SeaMode.WITH_FLOOR, TopologyMode.CONTINENTAL, false);
+        EndHeightmap legacyMap = new EndHeightmap(legacyProfile, SEED);
+        EndDensity legacy = new EndDensity(legacyMap);
+        boolean foundDifferentColumn = false;
+
+        for (int sample = 0; sample < 1024 && !foundDifferentColumn; sample++) {
+            float worldX = outerX(sample);
+            float worldZ = outerZ(sample);
+            for (int y = shelfMap.levels().minY; y <= shelfMap.levels().maxY; y += 7) {
+                if (shelfMap.levels().scale(y) < shelfMap.landmassVolume().minimumUnderside()) {
+                    continue;
+                }
+                float shelfExpected = uncachedDensity(shelfMap, EndSubsurface.DISABLED,
+                        worldX, y, worldZ, SEED);
+                float legacyExpected = uncachedDensity(legacyMap, EndSubsurface.DISABLED,
+                        worldX, y, worldZ, SEED);
+                if (shelfExpected == legacyExpected) {
+                    continue;
+                }
+
+                assertEquals(shelfExpected, shelf.density(worldX, y, worldZ, SEED), 0.0F);
+                assertEquals(legacyExpected, legacy.density(worldX, y, worldZ, SEED), 0.0F);
+                assertEquals(shelfExpected, shelf.density(worldX, y, worldZ, SEED), 0.0F);
+                foundDifferentColumn = true;
+                break;
+            }
+        }
+
+        assertTrue(foundDifferentColumn,
+                "the owner-switch regression must exercise different shelf and legacy density values");
+    }
+
+    @Test
+    void defaultSubsurfaceMatchesLegacyConstructor() {
+        EndHeightmap map = new EndHeightmap(TestProfile.defaultEnd(), SEED);
+        EndDensity legacy = new EndDensity(map);
+        EndDensity explicitDefault = new EndDensity(map,
+                SubsurfaceConfig.DEFAULT.buildRuntime(SEED));
+
+        for (int i = 0; i < SAMPLES; i++) {
+            for (int y = -100; y <= 2000; y += 137) {
+                assertEquals(legacy.density(x(i), y, z(i), SEED),
+                        explicitDefault.density(x(i), y, z(i), SEED), 0.0F);
+            }
+        }
+    }
+
+    @Test
+    void configuredAbyssCarvesFromTerrainTopDown() {
+        TestProfile profile = new TestProfile(4064, -2032, 0, 0,
+                SeaMode.WITH_FLOOR, TopologyMode.CONTINENTAL_SHATTERED, false);
+        EndHeightmap map = new EndHeightmap(profile, SEED);
+        EndSubsurface subsurface = new SubsurfaceConfig(
+                new AbyssPitConfig(true, 1600, 64, 0.0F, 0.001F, 64, 0.0F))
+                .buildRuntime(SEED);
+        EndDensity density = new EndDensity(map, subsurface);
+        int i = findAbyssSample(map, subsurface);
+        int terrainTopY = map.levels().scale(map.getHeight(x(i), z(i), SEED));
+
+        assertEquals(0.0F, density.density(x(i), terrainTopY, z(i), SEED), 0.0F,
+                "abyss must carve the terrain top at an active pit sample");
+        assertEquals(1.0F, density.density(x(i), terrainTopY - 128, z(i), SEED), 0.0F,
+                "abyss must stop below its configured depth instead of voiding the whole column");
+    }
+
+    @Test
+    void configuredCavesCarveInsideTerrainVolume() {
+        TestProfile profile = new TestProfile(4064, -2032, 0, 0,
+                SeaMode.WITH_FLOOR, TopologyMode.CONTINENTAL_SHATTERED, false);
+        EndHeightmap map = new EndHeightmap(profile, SEED);
+        EndSubsurface subsurface = caveSubsurface();
+        EndDensity density = new EndDensity(map, subsurface);
+        CaveSample sample = findCaveSample(map, subsurface);
+
+        assertEquals(0.0F, density.density(x(sample.index), sample.y, z(sample.index), SEED),
+                0.0F, "enabled cave field must carve an active 3D sample");
+    }
+
+    @Test
+    void defaultOuterContinentsHaveFiniteShelfUndersides() {
+        EndPreset preset = EndPreset.defaults();
+        EndHeightmap map = new EndHeightmap(preset, SEED);
+        EndDensity density = new EndDensity(map);
+        int sample = findOuterShelfSample(map);
+        float worldX = outerX(sample);
+        float worldZ = outerZ(sample);
+        float landness = map.getLandness(worldX, worldZ, SEED);
+        float terrainTop = map.getHeight(worldX, worldZ, SEED);
+        float underside = map.landmassVolume().underside(worldX, worldZ, landness, terrainTop);
+        int topY = map.levels().scale(terrainTop);
+        int undersideY = map.levels().scale(underside);
+
+        assertEquals(1.0F, density.density(worldX, topY, worldZ, SEED), 0.0F,
+                "a finite shelf must remain solid at its terrain top");
+        assertEquals(1.0F, density.density(worldX, (topY + undersideY) / 2, worldZ, SEED), 0.0F,
+                "a finite shelf must retain its body between top and underside");
+        assertEquals(0.0F, density.density(worldX, undersideY - 2, worldZ, SEED), 0.0F,
+                "a finite shelf must be void below its underside instead of filling to world bottom");
+    }
+
+    @Test
+    void outerShelfEdgeColumnsConvergeBeforeTheyBecomeVoid() {
+        EndPreset preset = EndPreset.defaults();
+        EndHeightmap map = new EndHeightmap(preset, SEED);
+        EndDensity density = new EndDensity(map);
+        OuterShelfEdge edge = findOuterShelfEdge(map);
+        float terrainTop = map.getHeight(edge.x(), edge.z(), SEED, edge.landness());
+        float underside = map.landmassVolume().underside(
+                edge.x(), edge.z(), edge.landness(), terrainTop);
+        float thicknessBlocks = (terrainTop - underside) * map.levels().worldHeight;
+        int undersideY = map.levels().scale(underside);
+        int topY = map.levels().scale(terrainTop);
+        int solidBlocks = 0;
+        for (int y = undersideY - 2; y <= topY + 2; y++) {
+            if (density.isSolid(edge.x(), y, edge.z(), SEED)) {
+                solidBlocks++;
+            }
+        }
+
+        assertTrue(thicknessBlocks < ContinentConfig.defaults().shelfEdgeThickness() * 0.12F,
+                "near-void land must converge instead of retaining a tall shelf edge");
+        assertTrue(solidBlocks <= 1,
+                "a sub-block shelf edge must not round into a multi-block vertical wall");
+        assertEquals(0.0F, density.density(edge.x(), undersideY - 2, edge.z(), SEED), 0.0F,
+                "the converged edge must still become void immediately below its underside");
+    }
+
+    @Test
+    void cachedFiniteShelfColumnsMatchUncachedDensity() {
+        EndPreset preset = EndPreset.defaults();
+        EndHeightmap map = new EndHeightmap(preset, SEED);
+        EndSubsurface subsurface = preset.subsurfaceConfig().buildRuntime(SEED);
+        EndDensity density = new EndDensity(map, subsurface);
+        int sample = findOuterShelfSample(map);
+        float worldX = outerX(sample);
+        float worldZ = outerZ(sample);
+
+        for (int y = map.levels().minY; y <= map.levels().maxY; y += 19) {
+            assertEquals(uncachedDensity(map, subsurface, worldX, y, worldZ, SEED),
+                    density.density(worldX, y, worldZ, SEED), 0.0F,
+                    "cached finite shelf must match direct sampling at y=" + y);
+        }
+    }
+
+    @Test
+    void cachedRtfBandColumnsMatchUncachedDensity() {
+        EndPreset preset = rtfBandPreset();
+        EndHeightmap map = new EndHeightmap(preset, SEED);
+        EndDensity density = new EndDensity(map);
+        int sample = findRtfBandShelfSample(map);
+        float worldX = outerX(sample);
+        float worldZ = outerZ(sample);
+
+        for (int y = map.levels().minY; y <= map.levels().maxY; y += 19) {
+            assertEquals(uncachedDensity(map, EndSubsurface.DISABLED, worldX, y, worldZ, SEED),
+                    density.density(worldX, y, worldZ, SEED), 0.0F,
+                    "cached R2 bands must match the uncached signal/height/underside path at y=" + y);
+        }
+    }
+
+    @Test
+    void rtfBandShelfEdgesConvergeBeforeBecomingVoid() {
+        EndHeightmap map = new EndHeightmap(rtfBandPreset(), SEED);
+        EndDensity density = new EndDensity(map);
+        RtfBandEdge edge = findRtfBandEdge(map);
+        float terrainTop = map.getHeight(edge.x(), edge.z(), SEED);
+        float underside = map.landmassVolume().underside(
+                edge.x(), edge.z(), edge.landness(), terrainTop);
+        float thicknessBlocks = (terrainTop - underside) * map.levels().worldHeight;
+        int undersideY = map.levels().scale(underside);
+        int topY = map.levels().scale(terrainTop);
+        int solidBlocks = 0;
+        for (int y = undersideY - 2; y <= topY + 2; y++) {
+            solidBlocks += density.isSolid(edge.x(), y, edge.z(), SEED) ? 1 : 0;
+        }
+
+        assertTrue(thicknessBlocks < ContinentConfig.defaults().shelfEdgeThickness() * 0.12F,
+                "R2 shelf edges must converge instead of becoming tall solid curtains");
+        assertTrue(solidBlocks <= 1,
+                "R2 sub-block shelf edges must not quantise into a multi-block wall");
+    }
+
+    @Test
+    void shelfMinimumUndersideEarlyReturnMatchesFullPostProcessSampling() {
+        EndHeightmap map = new EndHeightmap(EndPreset.defaults(), SEED)
+                .withClimate(ClimateModulator.defaults(EndClimate.defaults(SEED)))
+                .withRivers(EndRiverMap.defaults())
+                .withLakes(EndLakeMap.defaults());
+        EndDensity density = new EndDensity(map);
+        int guaranteedVoidY = map.levels().minY;
+
+        assertTrue(map.levels().scale(guaranteedVoidY) < map.landmassVolume().minimumUnderside(),
+                "default Standard shelf must leave a lower void band for the early return");
+        for (int i = 0; i < 128; i++) {
+            float worldX = outerX(i);
+            float worldZ = outerZ(i);
+            assertEquals(uncachedDensity(map, EndSubsurface.DISABLED, worldX, guaranteedVoidY, worldZ, SEED),
+                    density.density(worldX, guaranteedVoidY, worldZ, SEED), 0.0F,
+                    "shelf lower-bound early return must match the full density path");
         }
     }
 
@@ -218,5 +543,165 @@ class EndDensityTest {
                 assertTrue(!inBand, "void block inside [surface, terrainTop] at y=" + y);
             }
         }
+    }
+
+    @Test
+    void finiteWithFloorBuildsAnExteriorSeabedBelowTheWaterColumn() {
+        EndPreset preset = new EndPresetBuilder(EndPreset.defaults())
+                .seaMode(SeaMode.WITH_FLOOR)
+                .build();
+        EndHeightmap map = new EndHeightmap(preset, SEED);
+        EndDensity density = new EndDensity(map);
+        OuterOcean ocean = findOuterOcean(map);
+        int floorY = density.oceanFloorY(ocean.x(), ocean.z(), SEED);
+
+        assertTrue(floorY < map.levels().surfaceFillY,
+                "WITH_FLOOR ocean needs a water column above its seabed");
+        assertEquals(1.0F, density.density(ocean.x(), floorY, ocean.z(), SEED), 0.0F,
+                "the exterior ocean floor must be solid at its floor height");
+        assertEquals(0.0F, density.density(ocean.x(), floorY + 1, ocean.z(), SEED), 0.0F,
+                "the space above the seabed must remain empty for the fluid picker");
+        assertEquals(1.0F, density.density(ocean.x(), map.levels().minY, ocean.z(), SEED), 0.0F,
+                "WITH_FLOOR must close the ocean above the world bottom");
+
+        int landSample = findOuterShelfSample(map);
+        float landX = outerX(landSample);
+        float landZ = outerZ(landSample);
+        int floorBelowLandY = density.oceanFloorY(landX, landZ, SEED);
+        assertEquals(1.0F, density.density(landX, floorBelowLandY, landZ, SEED), 0.0F,
+                "WITH_FLOOR seabed must continue below the continental projection");
+    }
+
+    private static EndSubsurface caveSubsurface() {
+        return new SubsurfaceConfig(
+                AbyssPitConfig.DISABLED,
+                CaveTunnelConfig.DISABLED,
+                new CaveSystemConfig(true, 2400, 96, 768,
+                        0.9F, 0.9F, 0.0F),
+                new CaveNetworkConfig(384, 0.95F, 128,
+                        4.0F, 0.6F, 0.45F, 0.6F),
+                new CaveChamberConfig(0.95F, 96, 384,
+                        2.2F, 0.35F, 0.7F))
+                .buildRuntime(SEED);
+    }
+
+    private static int findOuterShelfSample(EndHeightmap map) {
+        for (int i = 0; i < 1024; i++) {
+            float worldX = outerX(i);
+            float worldZ = outerZ(i);
+            float landness = map.getLandness(worldX, worldZ, SEED);
+            float height = map.getHeight(worldX, worldZ, SEED);
+            if (landness > 0.55F && height > map.levels().surface + 0.08F) {
+                return i;
+            }
+        }
+        throw new AssertionError("no solid OUTER_CONTINENTS sample found");
+    }
+
+    private static int findRtfBandShelfSample(EndHeightmap map) {
+        for (int i = 0; i < 1024; i++) {
+            float worldX = outerX(i);
+            float worldZ = outerZ(i);
+            float landness = map.getLandness(worldX, worldZ, SEED);
+            if (landness > 0.55F && map.getInlandness(worldX, worldZ, SEED) > 0.5F) {
+                return i;
+            }
+        }
+        throw new AssertionError("no RTF band shelf sample found");
+    }
+
+    private static OuterShelfEdge findOuterShelfEdge(EndHeightmap map) {
+        for (int z = 2560; z <= 18944; z += 128) {
+            for (int x = 2560; x <= 18944; x += 128) {
+                float landness = map.getLandness(x, z, SEED);
+                if (landness > 0.0F && landness <= 0.05F) {
+                    return new OuterShelfEdge(x, z, landness);
+                }
+            }
+        }
+        throw new AssertionError("no near-void OUTER_CONTINENTS edge sample found");
+    }
+
+    private static RtfBandEdge findRtfBandEdge(EndHeightmap map) {
+        for (int z = -16000; z <= 16000; z += 128) {
+            for (int x = -16000; x <= 16000; x += 128) {
+                float landness = map.getLandness(x, z, SEED);
+                if (landness > 0.0F && landness <= 0.05F) {
+                    return new RtfBandEdge(x, z, landness);
+                }
+            }
+        }
+        throw new AssertionError("no near-void RTF band edge sample found");
+    }
+
+    private static OuterOcean findOuterOcean(EndHeightmap map) {
+        for (int z = 4096; z <= 20000; z += 128) {
+            for (int x = 4096; x <= 20000; x += 128) {
+                if (map.getLandness(x, z, SEED) <= 0.0F) {
+                    return new OuterOcean(x, z);
+                }
+            }
+        }
+        throw new AssertionError("no exterior ocean sample found");
+    }
+
+    private static EndPreset rtfBandPreset() {
+        ContinentConfig config = new ContinentConfigBuilder(ContinentConfig.defaults())
+                .continentScale(3000)
+                .continentJitter(0.7F)
+                .continentAlgorithm(ContinentAlgorithm.RTF_MULTI)
+                .build();
+        return new endterraforged.world.config.EndPresetBuilder(EndPreset.defaults())
+                .continentConfig(config)
+                .build();
+    }
+
+    private static float outerX(int index) {
+        return 6400.0F + (index % 32) * 512.0F;
+    }
+
+    private static float outerZ(int index) {
+        return 6400.0F + (index / 32) * 512.0F;
+    }
+
+    private static int defaultOuterShelfDensityBits(EndDensity density, int sample) {
+        float worldX = 6400.0F + (sample & 31) * 192.0F;
+        float worldZ = 6400.0F + ((sample >>> 5) & 15) * 192.0F;
+        int worldY = -256 + ((sample * 73) & 511);
+        return Float.floatToIntBits(density.density(worldX, worldY, worldZ, SEED));
+    }
+
+    private static float uncachedDensity(EndHeightmap heightmap, EndSubsurface subsurface,
+                                         float x, int worldY, float z, int seed) {
+        EndLandmassVolume volume = heightmap.landmassVolume();
+        float landness = heightmap.getLandness(x, z, seed);
+        if (landness <= 0.0F) {
+            return 0.0F;
+        }
+        float heightNorm = heightmap.getHeight(x, z, seed);
+        float yNorm = heightmap.levels().scale(worldY);
+        if (yNorm > heightNorm) {
+            return 0.0F;
+        }
+        if (!volume.isFinite() && !heightmap.seaMode().hasFloor() && yNorm <= heightmap.levels().surface) {
+            return 0.0F;
+        }
+        if (volume.isFinite() && yNorm < volume.underside(x, z, landness, heightNorm)) {
+            return 0.0F;
+        }
+        return subsurface.carves(x, z, landness, yNorm, heightNorm,
+                heightmap.levels().worldHeight) ? 0.0F : 1.0F;
+    }
+
+    private record CaveSample(int index, int y) {
+    }
+
+    private record OuterShelfEdge(float x, float z, float landness) {
+    }
+
+    private record RtfBandEdge(float x, float z, float landness) {
+    }
+
+    private record OuterOcean(float x, float z) {
     }
 }

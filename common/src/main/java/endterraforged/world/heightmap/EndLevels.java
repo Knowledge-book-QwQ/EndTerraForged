@@ -31,7 +31,10 @@ import endterraforged.world.config.DimensionProfile;
  * safe to share across parallel tile generators.</p>
  */
 public class EndLevels {
+    public final int minY;
     public final int worldHeight;
+    public final int maxYExclusive;
+    public final int maxY;
     public final float unit;
 
     /** World Y of the reference surface (sea level or island baseline). */
@@ -49,26 +52,29 @@ public class EndLevels {
     public final float elevationRange;
 
     public EndLevels(DimensionProfile profile) {
+        this.minY = profile.minY();
         this.worldHeight = Math.max(1, profile.worldHeight());
+        this.maxYExclusive = Math.addExact(this.minY, this.worldHeight);
+        this.maxY = this.maxYExclusive - 1;
         this.unit = NoiseUtil.div(1, this.worldHeight);
-        this.surfaceY = profile.surfaceY();
+        this.surfaceY = Math.clamp(profile.surfaceY(), this.minY, this.maxY);
         // mirror upstream's "fill to Y-1 / ground starts at Y+1" convention,
         // clamped so a degenerate profile cannot produce out-of-range indices.
-        this.surfaceFillY = Math.min(this.surfaceY - 1, this.worldHeight);
-        this.groundY = Math.min(this.surfaceY + 1, this.worldHeight);
-        this.surface = NoiseUtil.div(this.surfaceFillY, this.worldHeight);
-        this.ground = NoiseUtil.div(this.groundY, this.worldHeight);
+        this.surfaceFillY = Math.clamp(this.surfaceY - 1, this.minY, this.maxY);
+        this.groundY = Math.clamp(this.surfaceY + 1, this.minY, this.maxY);
+        this.surface = scale(this.surfaceFillY);
+        this.ground = scale(this.groundY);
         this.elevationRange = 1.0F - this.surface;
     }
 
     /** Converts a normalised {@code [0,1]} height to a world Y. */
     public int scale(float value) {
-        return (int) (value * this.worldHeight);
+        return this.minY + (int) (value * this.worldHeight);
     }
 
     /** Converts a world Y to a normalised {@code [0,1]} height. */
     public float scale(int level) {
-        return NoiseUtil.div(level, this.worldHeight);
+        return NoiseUtil.div(level - this.minY, this.worldHeight);
     }
 
     /**
@@ -91,16 +97,16 @@ public class EndLevels {
         if (y <= this.surfaceFillY) {
             return 0.0F;
         }
-        return this.scale(y - this.surfaceFillY) / this.elevationRange;
+        return NoiseUtil.div(y - this.surfaceFillY, this.worldHeight) / this.elevationRange;
     }
 
     /** Normalised height {@code surfaceFillY + amount} blocks above the surface fill line. */
     public float surface(int amount) {
-        return NoiseUtil.div(this.surfaceFillY + amount, this.worldHeight);
+        return scale(this.surfaceFillY + amount);
     }
 
     /** Normalised height {@code groundY + amount} blocks above the ground line. */
     public float ground(int amount) {
-        return NoiseUtil.div(this.groundY + amount, this.worldHeight);
+        return scale(this.groundY + amount);
     }
 }

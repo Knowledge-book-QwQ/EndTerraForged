@@ -132,6 +132,30 @@ class FloatingIslandsFieldTest {
         assertTrue(farBelow < 0.05F, "3σ below centre should be ~void: " + farBelow);
     }
 
+    @Test
+    void verticalSupportCutsOffTheNonZeroGaussianTail() {
+        FloatingIslandsField field = FloatingIslandsField.defaults();
+        float cy = field.centerY();
+        float sigma = field.verticalScale();
+        float solidX = 0.0F;
+        float solidZ = 0.0F;
+        boolean found = false;
+        for (int i = 0; i < SAMPLES; i++) {
+            if (field.solidity(x(i), cy, z(i), SEED) > 0.0F) {
+                solidX = x(i);
+                solidZ = z(i);
+                found = true;
+                break;
+            }
+        }
+        assertTrue(found, "need an island sample to test vertical support");
+
+        assertEquals(0.0F, field.solidity(solidX, cy + 4.0F * sigma, solidZ, SEED), 0.0F,
+                "the negligible Gaussian tail must not create a solid density column");
+        assertEquals(0.0F, field.solidity(solidX, cy - 4.0F * sigma, solidZ, SEED), 0.0F,
+                "the negligible Gaussian tail must not create a solid density column");
+    }
+
     // ----- shape: horizontal radial falloff ------------------------------
 
     @Test

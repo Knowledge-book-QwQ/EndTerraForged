@@ -34,6 +34,25 @@ import endterraforged.world.noise.Noise;
 public interface Continent extends Noise {
 
     /**
+     * Samples macro-continent diagnostics without allocating a value object.
+     *
+     * <p>Legacy continent implementations have no separate inland signal, so
+     * they preserve their historical terrain strength by reporting full
+     * inlandness wherever the caller chooses to consume it.</p>
+     */
+    default void sampleSignals(float x, float z, int seed, ContinentSignalBuffer output) {
+        float landness = compute(x, z, seed);
+        output.set(landness, landness, 1.0F);
+    }
+
+    /** Materialises an immutable signal snapshot for diagnostics and preview code. */
+    default ContinentSignals signalsAt(float x, float z, int seed) {
+        ContinentSignalBuffer output = new ContinentSignalBuffer();
+        sampleSignals(x, z, seed, output);
+        return output.snapshot();
+    }
+
+    /**
      * Packs signed cell coordinates into a non-negative, collision-free long
      * id via zigzag encoding.
      *

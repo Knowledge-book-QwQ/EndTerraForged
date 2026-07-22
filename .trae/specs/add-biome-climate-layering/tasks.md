@@ -1,5 +1,7 @@
 # Tasks
 
+> 文档状态：已完成的历史任务列表，不作为当前待办。
+> 当前执行队列见 [`../../../PLAN.md`](../../../PLAN.md)。
 > 落地顺序：每步独立可编译、可测、可回滚（DEVELOPMENT.md §5「小步快走」）。步骤 1（BiomeVariant 编译 bug 修复）已在本轮 b46e371 提交。
 
 - [x] Task 1: 修复 BiomeVariant.java 编译 bug (commit b46e371)

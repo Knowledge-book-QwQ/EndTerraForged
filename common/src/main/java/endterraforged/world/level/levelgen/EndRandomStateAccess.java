@@ -11,19 +11,22 @@ package endterraforged.world.level.levelgen;
 import endterraforged.world.floatingislands.FloatingIslandsField;
 import endterraforged.world.heightmap.EndDensity;
 
+import net.minecraft.world.level.levelgen.DensityFunction;
+import net.minecraft.world.level.levelgen.Aquifer;
+
 /**
  * Duck-typed accessor injected onto {@code net.minecraft.world.level.
  * levelgen.RandomState} by {@code MixinRandomState}. Vanilla's
- * {@code RandomState} consumes the world seed and the
- * {@code NoiseGeneratorSettings} key in its constructor and exposes
- * neither — but the End's late-binding {@link EndDensityVisitor} needs
+ * {@code RandomState} consumes the world seed and worldgen settings during
+ * creation and exposes neither — but the End's late-binding
+ * {@link EndDensityVisitor} needs
  * both to build the per-dimension {@link EndDensity}.
  *
- * <p><b>How this gets populated.</b> {@code MixinRandomState} hooks
- * {@code RandomState.create(Provider, ResourceKey, long)} at
- * {@code @At("HEAD")} to stash the seed + isEnd flag into a
- * {@code ThreadLocal}, then hooks {@code RandomState.<init>} at
- * {@code @At("HEAD")} to consume that stash and (for End dimensions)
+ * <p><b>How this gets populated.</b> {@code MixinRandomState} hooks the
+ * {@code RandomState.create} overloads to stash the seed, provider and loaded
+ * settings into thread-confined capture state, then hooks
+ * {@code RandomState.<init>} immediately before its router {@code mapAll}
+ * call to consume that state and (for End dimensions)
  * eagerly build the {@link EndDensity} via
  * {@link endterraforged.world.heightmap.EndWorldgenBootstrap}. The
  * profile comes from {@link endterraforged.world.config.EndPresetAccess#getOrDefault()}
@@ -34,13 +37,12 @@ import endterraforged.world.heightmap.EndDensity;
  * {@code NoiseChunk} Mixin's visitor injection is a no-op there.</p>
  *
  * <p><b>Stage 6.3 fallback.</b> If {@link EndWorldgenBootstrap} catches
- * an exception during construction, it returns a {@code degraded} result
- * and {@code MixinRandomState} drops the End flag — so {@code isEnd()}
- * returns {@code false} even for the End dimension, causing
- * {@code MixinNoiseChunk} to skip the {@link EndDensityVisitor} pass.
- * The End dimension then loads with vanilla generation (placeholder
- * {@link EndDensityFunction#INSTANCE} returns {@code 0.0}, so chunks
- * come out as air) rather than crashing world creation.</p>
+ * an exception during construction, it returns a {@code degraded} result.
+ * {@code MixinRandomState} then builds vanilla's End {@code finalDensity}
+ * from the density-function registry. {@code MixinNoiseChunk} keeps the End
+ * visitor enabled and replaces the EndTerraForged placeholder with that
+ * vanilla fallback, so a bad preset or bootstrap failure does not turn the
+ * dimension into empty chunks.</p>
  *
  * <p><b>Why interface injection and not a side-map.</b> A
  * {@code WeakHashMap<RandomState, ...>} would work but leaks if the
@@ -61,14 +63,12 @@ public interface EndRandomStateAccess {
     /**
      * Whether this RandomState is for the End dimension.
      *
-     * <p>Note: stage 6.3 fallback may set this to {@code false} even
-     * for an End dimension — when {@link EndWorldgenBootstrap} catches
-     * a construction failure, {@code MixinRandomState} drops the End
-     * flag so {@code MixinNoiseChunk} skips the visitor pass.
-     * Callers that need "this is physically the End dimension" should
-     * not rely on this flag — they should check the
-     * {@code NoiseGeneratorSettings.END} ResourceKey at
-     * {@code RandomState.create} capture time instead.</p>
+     * <p>The flag means this RandomState contains ETF's End density
+     * placeholder. A degraded bootstrap keeps it true so
+     * {@code MixinNoiseChunk} can replace that placeholder with vanilla End
+     * final density. Callers that need a physical-dimension identity should
+     * still use the {@code NoiseGeneratorSettings.END} ResourceKey at
+     * {@code RandomState.create} capture time.</p>
      */
     boolean endTerraForged$isEnd();
 
@@ -80,6 +80,17 @@ public interface EndRandomStateAccess {
      */
     EndDensity endTerraForged$getEndDensity();
 
+    /** Dimension-bound exterior-ocean picker, or {@code null} outside ETF's End. */
+    Aquifer.FluidPicker endTerraForged$getFluidPicker();
+
+    /**
+     * Vanilla End {@code finalDensity} retained for the central protected
+     * region and for EndTerraForged bootstrap degradation. {@code null} for
+     * non-End states only: ETF rejects an End construction that cannot build
+     * this fallback instead of risking central-region corruption.
+     */
+    DensityFunction endTerraForged$getFallbackEndDensity();
+
     /**
      * The End's floating-island overlay field, built when the dimension
      * profile has {@code floatingIslandsEnabled == true}; {@code null}
@@ -88,7 +99,7 @@ public interface EndRandomStateAccess {
      * {@code null}, {@link EndDensityVisitor} leaves
      * {@link endterraforged.world.level.levelgen.FloatingIslandsFunction}
      * placeholders as the stateless INSTANCE so they contribute {@code 0.0}
-     * to the add+clamp composition in {@code noise_settings}.
+     * to the {@code max} composition in {@code noise_settings}.
      */
     FloatingIslandsField endTerraForged$getFloatingIslandsField();
 }

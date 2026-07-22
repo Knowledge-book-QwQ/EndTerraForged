@@ -10,16 +10,25 @@
 package endterraforged.mixin;
 
 import net.minecraft.core.HolderGetter;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceKey;
+import net.minecraft.world.level.levelgen.DensityFunction;
+import net.minecraft.world.level.levelgen.Aquifer;
 import net.minecraft.world.level.levelgen.NoiseGeneratorSettings;
+import net.minecraft.world.level.levelgen.NoiseSettings;
 import net.minecraft.world.level.levelgen.RandomState;
 
+import endterraforged.EndTerraForged;
 import endterraforged.world.config.EndPreset;
 import endterraforged.world.config.EndPresetAccess;
 import endterraforged.world.floatingislands.FloatingIslandsField;
 import endterraforged.world.heightmap.EndDensity;
 import endterraforged.world.heightmap.EndWorldgenBootstrap;
+import endterraforged.world.level.levelgen.EndDensityBindingPolicy;
+import endterraforged.world.level.levelgen.EndDensitySettingsClassifier;
+import endterraforged.world.level.levelgen.EndRandomStateProviderCapture;
 import endterraforged.world.level.levelgen.EndRandomStateAccess;
+import endterraforged.world.level.levelgen.EndOceanFluidPicker;
 
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
@@ -41,14 +50,17 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  * placeholders. This Mixin bridges that gap.</p>
  *
  * <p><b>The capture flow (ThreadLocal).</b> {@code RandomState.create}
- * has two overloads; only the {@code (Provider, ResourceKey, long)} form
- * carries the {@code ResourceKey}. We {@code @Inject} at its HEAD to stash
- * the seed + isEnd flag into a {@link ThreadLocal}, then {@code @Inject}
- * at {@code <init>} HEAD to read that stash (same thread, synchronous call
- * — {@code create} calls {@code new RandomState(...)} inline) and populate
- * the {@code @Unique} fields before the constructor body runs. The
- * constructor body's {@code router.mapAll(...)} therefore sees a
- * fully-initialised {@code EndRandomStateAccess}.</p>
+ * has a ResourceKey overload and a direct settings overload. Both converge on
+ * the constructor, but chunk generators may call the direct settings overload
+ * without a key. We retain the optional provider from the key overload and
+ * identify ETF settings in the direct overload from the final-density tree,
+ * then pass the seed + target flag to the constructor through a
+ * {@link ThreadLocal}. For the direct {@code ChunkMap} route,
+ * {@code MixinChunkMap} supplies its dynamic registry provider through a
+ * separate one-shot thread-local. The constructor body's {@code router.mapAll(...)}
+ * therefore sees a fully-initialised {@code EndRandomStateAccess}. ETF still
+ * rejects any direct End settings call without that provider because proceeding
+ * would overwrite the frozen central region with ETF terrain or placeholder air.</p>
  *
  * <p><b>Why ThreadLocal and not a side-map.</b> A
  * {@code WeakHashMap<RandomState, ...>} would work but leaks on frequent
@@ -57,21 +69,27 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
  * factory ({@code create}) into the instance constructor ({@code <init>})
  * without modifying vanilla's call signature.</p>
  *
- * <p><b>Non-End dimensions.</b> When {@code key != NoiseGeneratorSettings.END},
- * {@code isEnd} stays {@code false} and {@code endDensity} stays {@code null}.
- * The downstream {@code MixinNoiseChunk} checks {@code isEnd} before
- * applying the visitor, so overworld/nether are untouched.</p>
+ * <p><b>Non-target dimensions.</b> When the final-density tree lacks the
+ * ETF placeholder, {@code isEnd} stays {@code false} and
+ * {@code endDensity} stays {@code null}. The downstream
+ * {@code MixinNoiseChunk} checks that flag before applying the visitor, so
+ * overworld, nether and other noise settings are untouched.</p>
  */
 @Mixin(RandomState.class)
 public class MixinRandomState implements EndRandomStateAccess {
 
     /**
-     * Thread-local capture buffer: {@code [0] = seed}, {@code [1] = isEnd flag}.
+     * Thread-local capture buffer: {@code [0] = seed}, {@code [1] = isEnd flag},
+     * {@code [2] = actual min Y}, {@code [3] = actual world height}.
      * Cleared after {@code <init>} consumes it.
      */
     @Unique
     private static final ThreadLocal<long[]> END_TERRAFORGED_CAPTURE =
-            ThreadLocal.withInitial(() -> new long[]{-1L, 0L});
+            ThreadLocal.withInitial(() -> new long[]{-1L, 0L, 0L, 0L});
+
+    @Unique
+    private static final ThreadLocal<HolderGetter.Provider> END_TERRAFORGED_PROVIDER =
+            new ThreadLocal<>();
 
     @Unique
     private long endTerraForged$seed = 0L;
@@ -81,6 +99,12 @@ public class MixinRandomState implements EndRandomStateAccess {
 
     @Unique
     private EndDensity endTerraForged$endDensity = null;
+
+    @Unique
+    private Aquifer.FluidPicker endTerraForged$fluidPicker = null;
+
+    @Unique
+    private DensityFunction endTerraForged$fallbackEndDensity = null;
 
     /**
      * The floating-island overlay field. Built only when {@code isEnd} and
@@ -97,13 +121,12 @@ public class MixinRandomState implements EndRandomStateAccess {
      * before the {@code <init>} constructor runs. The constructor reads this
      * stash in {@link #endTerraForged$initCapture}.
      *
-     * <p>Why a ThreadLocal: {@code create} has two overloads and only the
-     * 3-arg {@code (Provider, ResourceKey, long)} form carries the
-     * {@code ResourceKey}. We can't change vanilla's call signature, so the
-     * data has to flow from the static factory into the instance constructor
-     * via a side channel. ThreadLocal is the cleanest side channel because
-     * {@code create} calls {@code new RandomState(...)} synchronously on the
-     * same thread — no race.</p>
+     * <p>The key overload retains the provider needed by the vanilla central
+     * fallback and the degraded fallback.
+     * The settings overload classifies the router, which is necessary because
+     * chunk generators may call it directly. ThreadLocal passes that combined
+     * state into the synchronous constructor invocation without changing
+     * vanilla's method signatures.</p>
      *
      * <p>Must be static because the {@code create} injection runs in a static
      * context (no {@code this}).</p>
@@ -119,16 +142,62 @@ public class MixinRandomState implements EndRandomStateAccess {
             CallbackInfoReturnable<RandomState> cir) {
         long[] cap = END_TERRAFORGED_CAPTURE.get();
         cap[0] = seed;
-        // Use .equals rather than == for the ResourceKey comparison.
-        // Vanilla interns ResourceKey instances via ResourceKey.intern()
-        // (a process-wide ConcurrentHashMap cache), so == works in practice
-        // for the vanilla-provided NoiseGeneratorSettings.END key. But the
-        // ResourceKey contract is .equals — a non-interned key constructed
-        // by another mod (or by a test) would fail == but match .equals.
-        // The cost is one method call at RandomState.create (one dimension
-        // load per world), negligible vs the noise-tree construction that
-        // follows.
-        cap[1] = (NoiseGeneratorSettings.END.equals(key)) ? 1L : 0L;
+        END_TERRAFORGED_PROVIDER.set(provider);
+        // This overload delegates to the settings overload below. Keep its
+        // provider for the degraded vanilla fallback; the settings overload
+        // classifies the router that is actually constructed.
+    }
+
+    @Inject(
+            method = "create(Lnet/minecraft/world/level/levelgen/NoiseGeneratorSettings;"
+                    + "Lnet/minecraft/core/HolderGetter;J)"
+                    + "Lnet/minecraft/world/level/levelgen/RandomState;",
+            at = @At("HEAD")
+    )
+    private static void endTerraForged$captureSettingsCreate(
+            NoiseGeneratorSettings settings,
+            HolderGetter<net.minecraft.world.level.levelgen.synth.NormalNoise.NoiseParameters> noises,
+            long seed,
+            CallbackInfoReturnable<RandomState> cir) {
+        long[] cap = END_TERRAFORGED_CAPTURE.get();
+        cap[0] = seed;
+        HolderGetter.Provider chunkMapProvider = EndRandomStateProviderCapture.take();
+        HolderGetter.Provider provider = END_TERRAFORGED_PROVIDER.get();
+        if (provider == null) {
+            provider = chunkMapProvider;
+        }
+        boolean isEnd = EndDensitySettingsClassifier.containsEndDensity(settings.noiseRouter());
+        EndDensityBindingPolicy.Decision decision = EndDensityBindingPolicy.decide(
+                isEnd, provider != null);
+        if (decision == EndDensityBindingPolicy.Decision.REJECT_MISSING_VANILLA_FALLBACK) {
+            endTerraForged$clearCapture(cap);
+            EndTerraForged.LOGGER.error(
+                    "EndTerraForged refused direct End RandomState creation because no density "
+                            + "registry provider is available to preserve vanilla central density. "
+                            + "Use RandomState.create(HolderGetter.Provider, ResourceKey, long)."
+            );
+            throw new IllegalStateException(
+                    "EndTerraForged requires a density registry provider to preserve vanilla End "
+                            + "central generation");
+        }
+        if (decision == EndDensityBindingPolicy.Decision.BIND) {
+            END_TERRAFORGED_PROVIDER.set(provider);
+        } else {
+            END_TERRAFORGED_PROVIDER.remove();
+        }
+        cap[1] = decision == EndDensityBindingPolicy.Decision.BIND ? 1L : 0L;
+        NoiseSettings noiseSettings = settings.noiseSettings();
+        cap[2] = noiseSettings.minY();
+        cap[3] = noiseSettings.height();
+        if (isEnd) {
+            // P1 diagnostics: read the loaded settings, not the bundled JSON.
+            // Data packs or other mods can replace defaults before RandomState is built.
+            EndTerraForged.LOGGER.info(
+                    "EndTerraForged captured loaded End noise settings: minY={}, height={}, seaLevel={}, "
+                            + "aquifersEnabled={}, defaultBlock={}, defaultFluid={}",
+                    noiseSettings.minY(), noiseSettings.height(), settings.seaLevel(),
+                    settings.aquifersEnabled(), settings.defaultBlock(), settings.defaultFluid());
+        }
     }
 
     /**
@@ -165,7 +234,7 @@ public class MixinRandomState implements EndRandomStateAccess {
      *   <li>{@code this} fields can be assigned normally</li>
      *   <li>{@code router.mapAll} still sees the {@code @Unique} fields
      *       populated, which is the whole point — the {@link endterraforged.world.level.levelgen.EndDensityVisitor}
-     *       installed by {@code MixinNoiseChunk.@Redirect mapAll} reads them</li>
+     *       composed by {@code MixinNoiseChunk}'s {@code @ModifyArg} reads them</li>
      * </ul>
      *
      * <p>The Mixin default {@code ordinal=-1} matches the first occurrence of
@@ -182,6 +251,7 @@ public class MixinRandomState implements EndRandomStateAccess {
     )
     private void endTerraForged$initCapture(CallbackInfo ci) {
         long[] cap = END_TERRAFORGED_CAPTURE.get();
+        HolderGetter.Provider provider = END_TERRAFORGED_PROVIDER.get();
         try {
             this.endTerraForged$seed = cap[0];
             this.endTerraForged$isEnd = (cap[1] == 1L);
@@ -194,9 +264,9 @@ public class MixinRandomState implements EndRandomStateAccess {
                 int noiseSeed = (int) this.endTerraForged$seed;
                 // Stage 5.1: load the dimension profile from EndPreset (the
                 // serialisable single source of truth) rather than the stage-3.2
-                // EndDefaults placeholder. defaults() matches EndDefaults' values,
-                // so production terrain is unchanged; a future GUI/data-pack can
-                // supply a non-default EndPreset here.
+                // EndDefaults placeholder. The bundled default is the standard
+                // player envelope; the bootstrap below aligns it with the actual
+                // NoiseSettings selected by Minecraft.
                 //
                 // Stage 5.3: read from EndPresetAccess.getOrDefault() instead of
                 // EndPreset.defaults() directly, so the GUI's user-edited preset
@@ -205,6 +275,20 @@ public class MixinRandomState implements EndRandomStateAccess {
                 // server, direct world load), getOrDefault() falls back to
                 // EndPreset.defaults() — preserving the pre-GUI behaviour.
                 EndPreset profile = EndPresetAccess.getOrDefault();
+                try {
+                    this.endTerraForged$fallbackEndDensity =
+                            NoiseRouterDataAccessor.endterraforged$createEndRouter(
+                                    provider.lookupOrThrow(Registries.DENSITY_FUNCTION))
+                                    .finalDensity();
+                } catch (Exception e) {
+                    EndTerraForged.LOGGER.error(
+                            "EndTerraForged refused End RandomState creation because vanilla End "
+                                    + "final density could not be constructed. Generating without this "
+                                    + "fallback could alter the protected central region.",
+                            e);
+                    throw new IllegalStateException(
+                            "EndTerraForged could not construct vanilla End final density", e);
+                }
                 // Stage 4.x production wiring: attach the climate → rivers → lakes
                 // post-processors so the pure-logic layers (stage 2.5 / 4.x)
                 // actually reach the generated dimension. EndHeightmap.getHeight
@@ -218,27 +302,17 @@ public class MixinRandomState implements EndRandomStateAccess {
                 // end-to-end try/catch. Any exception in the chain degrades
                 // gracefully: EndWorldgenBootstrap publishes a non-degraded
                 // Result on success, or a degraded Result (with null fields +
-                // rolled-back EndClimateAccess) on failure. In the degraded case
-                // we drop the End flag below so MixinNoiseChunk skips the visitor
-                // pass — a null endDensity would otherwise NPE inside
-                // EndDensityFunction.Bound.compute on the first chunk and
-                // re-crash worldgen. The End dimension then loads with vanilla
-                // generation (placeholder EndDensityFunction.INSTANCE returns 0,
-                // so chunks come out as air; biome_source falls back to fast-path 1
-                // because EndClimateAccess is null). The world keeps loading
-                // rather than crashing — the user can fix the bad preset file
-                // and re-open.
+                // rolled-back EndClimateAccess) on failure. The visitor remains
+                // enabled in that case and replaces the ETF placeholder with the
+                // vanilla density retained above, so the dimension does not turn
+                // into air. The world keeps loading rather than crashing — the
+                // user can fix the bad preset file and re-open.
                 EndWorldgenBootstrap.Result result =
-                        EndWorldgenBootstrap.bootstrap(noiseSeed, profile);
-                if (result.degraded()) {
-                    // Drop End-ness so MixinNoiseChunk's redirect skips the
-                    // visitor pass (it checks isEnd() before calling
-                    // EndDensityVisitor). endDensity / floatingIslandsField stay
-                    // null (EndWorldgenBootstrap returned null fields and
-                    // EndClimateAccess was rolled back inside the bootstrap).
-                    this.endTerraForged$isEnd = false;
-                } else {
+                        EndWorldgenBootstrap.bootstrap(noiseSeed, profile, (int) cap[2], (int) cap[3]);
+                if (!result.degraded()) {
                     this.endTerraForged$endDensity = result.endDensity();
+                    this.endTerraForged$fluidPicker =
+                            new EndOceanFluidPicker(result.endDensity(), noiseSeed);
                     this.endTerraForged$floatingIslandsField = result.floatingIslandsField();
                 }
             }
@@ -260,9 +334,18 @@ public class MixinRandomState implements EndRandomStateAccess {
             // the ThreadLocal management correct by construction rather
             // than by coincidence — defensive against future code paths
             // that might construct RandomState without going through create.
-            cap[0] = -1L;
-            cap[1] = 0L;
+            endTerraForged$clearCapture(cap);
         }
+    }
+
+    @Unique
+    private static void endTerraForged$clearCapture(long[] capture) {
+        capture[0] = -1L;
+        capture[1] = 0L;
+        capture[2] = 0L;
+        capture[3] = 0L;
+        END_TERRAFORGED_PROVIDER.remove();
+        EndRandomStateProviderCapture.clear();
     }
 
     @Override
@@ -278,6 +361,16 @@ public class MixinRandomState implements EndRandomStateAccess {
     @Override
     public EndDensity endTerraForged$getEndDensity() {
         return this.endTerraForged$endDensity;
+    }
+
+    @Override
+    public Aquifer.FluidPicker endTerraForged$getFluidPicker() {
+        return this.endTerraForged$fluidPicker;
+    }
+
+    @Override
+    public DensityFunction endTerraForged$getFallbackEndDensity() {
+        return this.endTerraForged$fallbackEndDensity;
     }
 
     @Override

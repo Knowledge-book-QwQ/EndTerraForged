@@ -55,8 +55,8 @@ import endterraforged.world.noise.NoiseMath;
  * basin — acceptable in the End where water can vanish into the void at the
  * island edge), no connectivity to rivers (stage 4.6 forks).</p>
  *
- * <p><b>Thread safety.</b> Immutable record; safe to query from parallel
- * chunk-gen threads.</p>
+ * <p><b>Thread safety.</b> The config is immutable and scan state is stored
+ * per worker thread, so parallel chunk generation never shares mutable data.</p>
  *
  * @param cellSize     worley cell size in blocks; smaller = denser lake grid
  * @param lakeChance   fraction of cells that host a lake, in {@code [0,1]};
@@ -68,6 +68,9 @@ import endterraforged.world.noise.NoiseMath;
  */
 public record EndLakeMap(float cellSize, float lakeChance, float bedRadius,
                          float valleyRadius, float depth) {
+
+    private static final ThreadLocal<LakeSample> SAMPLE =
+            ThreadLocal.withInitial(LakeSample::new);
 
     /** End-tuned defaults: rarer than rivers, modest basins, shallow depth. */
     public static EndLakeMap defaults() {
@@ -91,13 +94,23 @@ public record EndLakeMap(float cellSize, float lakeChance, float bedRadius,
      *         sits; unchanged {@code inputHeight} otherwise
      */
     public float modifyHeight(float x, float z, int seed, EndHeightmap heightmap, float inputHeight) {
+        return modifyHeight(x, z, seed, heightmap, inputHeight,
+                heightmap.getLandness(x, z, seed));
+    }
+
+    /**
+     * Carves a lake using the caller's already-sampled continent landness.
+     * The supplied value must describe this exact world coordinate; density
+     * sampling uses this overload to avoid re-evaluating the continent noise.
+     */
+    public float modifyHeight(float x, float z, int seed, EndHeightmap heightmap,
+                              float inputHeight, float landness) {
         // Degenerate config guard: cellSize<=0 would make invCell=Inf and
         // poison the worley scan with NaN. No-op instead.
         if (cellSize <= 0.0F) {
             return inputHeight;
         }
         // Lakes only form on land — void stays void.
-        float landness = heightmap.getLandness(x, z, seed);
         if (landness <= 0.0F) {
             return inputHeight;
         }
@@ -163,7 +176,6 @@ public record EndLakeMap(float cellSize, float lakeChance, float bedRadius,
         float nearestCx = 0.0F;
         float nearestCz = 0.0F;
         float nearestDist = Float.MAX_VALUE;
-        boolean found = false;
 
         for (int dz = -1; dz <= 1; dz++) {
             for (int dx = -1; dx <= 1; dx++) {
@@ -172,23 +184,23 @@ public record EndLakeMap(float cellSize, float lakeChance, float bedRadius,
                 if (!hasLake(seed, cx, cz)) {
                     continue;
                 }
-                float[] centre = lakeCentre(seed, cx, cz);
-                float ddx = x - centre[0];
-                float ddz = z - centre[1];
+                float centreX = lakeCentreX(seed, cx, cz);
+                float centreZ = lakeCentreZ(seed, cx, cz);
+                float ddx = x - centreX;
+                float ddz = z - centreZ;
                 float dist = (float) Math.sqrt(ddx * ddx + ddz * ddz);
                 if (dist < nearestDist) {
                     nearestDist = dist;
-                    nearestCx = centre[0];
-                    nearestCz = centre[1];
-                    found = true;
+                    nearestCx = centreX;
+                    nearestCz = centreZ;
                 }
             }
         }
 
-        if (!found) {
+        if (nearestDist == Float.MAX_VALUE) {
             return null;
         }
-        return new LakeSample(nearestCx, nearestCz, nearestDist);
+        return SAMPLE.get().set(nearestCx, nearestCz, nearestDist);
     }
 
     /**
@@ -200,20 +212,27 @@ public record EndLakeMap(float cellSize, float lakeChance, float bedRadius,
         return h < lakeChance;
     }
 
-    /**
-     * Builds the lake centre for cell {@code (cx, cz)}: the cell midpoint plus
-     * a small hash-driven jitter so centres don't sit on a perfect grid.
-     */
-    private float[] lakeCentre(int seed, int cx, int cz) {
+    private float lakeCentreX(int seed, int cx, int cz) {
         float jitterX = NoiseMath.valCoord2D(seed + 0x9E3779B1, cx, cz) * 0.18F * cellSize;
-        float jitterZ = NoiseMath.valCoord2D(seed + 0x85EBCA77, cx, cz) * 0.18F * cellSize;
-        return new float[] {
-                (cx + 0.5F) * cellSize + jitterX,
-                (cz + 0.5F) * cellSize + jitterZ
-        };
+        return (cx + 0.5F) * cellSize + jitterX;
     }
 
-    /** A sampled lake: the centre coordinates and the distance from the sample to it. */
-    private record LakeSample(float cx, float cz, float distance) {
+    private float lakeCentreZ(int seed, int cx, int cz) {
+        float jitterZ = NoiseMath.valCoord2D(seed + 0x85EBCA77, cx, cz) * 0.18F * cellSize;
+        return (cz + 0.5F) * cellSize + jitterZ;
+    }
+
+    /** Per-worker mutable result for the allocation-sensitive lake scan. */
+    private static final class LakeSample {
+        private float cx;
+        private float cz;
+        private float distance;
+
+        private LakeSample set(float cx, float cz, float distance) {
+            this.cx = cx;
+            this.cz = cz;
+            this.distance = distance;
+            return this;
+        }
     }
 }

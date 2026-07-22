@@ -17,8 +17,12 @@ import endterraforged.world.climate.ClimateModulator;
 import endterraforged.world.climate.EndClimate;
 import endterraforged.world.climate.EndClimateAccess;
 import endterraforged.world.config.EndPreset;
+import endterraforged.world.config.EndPresetRuntimeResolver;
+import endterraforged.world.config.WorldVerticalBounds;
 import endterraforged.world.floatingislands.FloatingIslandsField;
 import endterraforged.world.lake.EndLakeMap;
+import endterraforged.world.level.biome.EndBiomeLayout;
+import endterraforged.world.level.biome.EndBiomeLayoutAccess;
 import endterraforged.world.river.EndRiverMap;
 
 /**
@@ -155,6 +159,51 @@ public final class EndWorldgenBootstrap {
     }
 
     /**
+     * Bootstraps using the vertical bounds selected by Minecraft's loaded
+     * {@code NoiseSettings}. The data pack is authoritative for those bounds;
+     * preset height fields are retained only as persisted metadata until world
+     * specification selection becomes an explicit creation-time feature.
+     */
+    public static Result bootstrap(int seed, EndPreset configuredProfile,
+                                   int actualMinY, int actualWorldHeight) {
+        try {
+            WorldVerticalBounds actualBounds = new WorldVerticalBounds(actualMinY, actualWorldHeight);
+            EndPresetRuntimeResolver.Resolution resolution =
+                    EndPresetRuntimeResolver.resolve(configuredProfile, actualBounds);
+            if (resolution.boundsAdjusted()) {
+                EndTerraForged.LOGGER.warn(
+                        "EndTerraForged preset world bounds {}..{} do not match loaded End "
+                                + "noise settings {}..{}; using loaded bounds for runtime height math.",
+                        configuredProfile.minY(), configuredProfile.maxY() - 1,
+                        actualBounds.minY(), actualBounds.maxYExclusive() - 1);
+            }
+            EndPreset runtimePreset = resolution.preset();
+            Result result = bootstrap(seed, runtimePreset);
+            if (result.succeeded()) {
+                EndTerraForged.LOGGER.info(
+                        "EndTerraForged End runtime ready: seed={}, requestedBounds={}..{}, "
+                                + "loadedBounds={}..{}, boundsAdjusted={}, topology={}, seaMode={}, "
+                                + "terrainLayout={}, archipelago={}, keepsFloor={}, floatingIslands={}",
+                        seed,
+                        configuredProfile.minY(), configuredProfile.maxY() - 1,
+                        actualBounds.minY(), actualBounds.maxYExclusive() - 1,
+                        resolution.boundsAdjusted(), runtimePreset.topologyMode(), runtimePreset.seaMode(),
+                        runtimePreset.terrainConfig().terrainLayoutMode(),
+                        result.endDensity().heightmap().archipelagoActive(),
+                        runtimePreset.seaMode().hasFloor(), runtimePreset.floatingIslandsEnabled());
+            }
+            return result;
+        } catch (Exception e) {
+            EndTerraForged.LOGGER.warn(
+                    "EndTerraForged rejected preset vertical settings; End dimension will fall back "
+                            + "to vanilla generation for this load.", e);
+            EndClimateAccess.set(null);
+            EndBiomeLayoutAccess.set(null);
+            return new Result(null, null, true);
+        }
+    }
+
+    /**
      * Package-private overload that accepts factory lambdas, so tests can
      * inject a factory that throws to exercise the failure-fallback path
      * without depending on the (unlikely) event of a real factory failing.
@@ -178,7 +227,8 @@ public final class EndWorldgenBootstrap {
                             BiFunction<EndPreset, Integer, EndHeightmap> heightmapFactory,
                             Function<EndPreset, FloatingIslandsField> floatingIslandsFactory) {
         try {
-            EndClimate climate = EndClimate.defaults(seed);
+            EndClimate climate = profile.climateConfig().build(seed);
+            EndBiomeLayout biomeLayout = profile.biomeLayoutConfig().buildRuntime();
             // Publish the climate so worker-thread biome lookups
             // (EndBiomeSource#getNoiseBiome) can sample it. If the
             // subsequent heightmap construction fails, the catch block
@@ -186,11 +236,13 @@ public final class EndWorldgenBootstrap {
             // partially-constructed stack would leak into the next End
             // load via the process-wide volatile holder.
             EndClimateAccess.set(climate);
+            EndBiomeLayoutAccess.set(biomeLayout);
             EndHeightmap heightmap = heightmapFactory.apply(profile, seed)
                     .withClimate(ClimateModulator.defaults(climate))
                     .withRivers(EndRiverMap.defaults())
                     .withLakes(EndLakeMap.defaults());
-            EndDensity endDensity = new EndDensity(heightmap);
+            EndDensity endDensity = new EndDensity(heightmap,
+                    profile.subsurfaceConfig().buildRuntime(seed));
             FloatingIslandsField floatingIslandsField = floatingIslandsFactory.apply(profile);
             return new Result(endDensity, floatingIslandsField, false);
         } catch (Exception e) {
@@ -211,6 +263,7 @@ public final class EndWorldgenBootstrap {
             // EndBiomeSource#getNoiseBiome on this load — climate != null
             // but endDensity == null would be semantically inconsistent).
             EndClimateAccess.set(null);
+            EndBiomeLayoutAccess.set(null);
             return new Result(null, null, true);
         }
     }

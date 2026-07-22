@@ -3,6 +3,8 @@ package endterraforged.world.filter;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import org.junit.jupiter.api.Test;
 
@@ -93,6 +95,15 @@ class ErosionConfigBuilderTest {
         ErosionConfig second = b.build();
         assertEquals(first, second,
                 "build() called twice without mutation must produce equal configs");
+    }
+
+    @Test
+    void buildRejectsInvalidState() {
+        IllegalStateException e = assertThrows(IllegalStateException.class,
+                () -> new ErosionConfigBuilder()
+                        .erosionRate(1.5F)
+                        .build());
+        assertTrue(e.getMessage().contains("erosion_rate"));
     }
 
     @Test

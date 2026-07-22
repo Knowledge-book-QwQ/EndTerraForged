@@ -12,6 +12,8 @@
  */
 package endterraforged.world.river;
 
+import java.util.Arrays;
+
 import endterraforged.world.heightmap.EndHeightmap;
 import endterraforged.world.heightmap.EndLevels;
 import endterraforged.world.noise.NoiseMath;
@@ -55,13 +57,13 @@ import endterraforged.world.noise.NoiseMath;
  *
  * <p><b>What this class does NOT do.</b> It does not place water blocks (that
  * is a stage-4.7 surface-system concern requiring MC chunk access). It does
- * not cache river networks per tile (stage 4 perf optimisation). It is the
+ * does not persist river networks outside the bounded worker cache. It is the
  * minimal valley-carving kernel that produces the "water runs off the island"
  * shape.</p>
  *
- * <p><b>Thread safety.</b> All fields are immutable primitives set at
- * construction; the backing {@link EndHeightmap} is immutable. Safe to query
- * from parallel chunk-gen threads.</p>
+ * <p><b>Thread safety.</b> All config fields are immutable and cached cell
+ * geometry is isolated per worker thread. The backing {@link EndHeightmap} is
+ * immutable, so parallel chunk generation is safe.</p>
  *
  * @param cellSize       worley cell size in blocks; smaller = denser river grid
  * @param riverChance    fraction of cells that host a river, in {@code [0,1]};
@@ -81,6 +83,13 @@ public record EndRiverMap(float cellSize, float riverChance, float bedWidth,
                           float valleyWidth, float bedDepth,
                           float forkChance, float forkPoint,
                           float forkAngleMax, float forkLengthFactor) {
+
+    private static final int CELL_CACHE_SIZE = 128;
+    private static final int CELL_CACHE_MASK = CELL_CACHE_SIZE - 1;
+    private static final ThreadLocal<RiverCellCache> CELL_CACHE =
+            ThreadLocal.withInitial(RiverCellCache::new);
+    private static final ThreadLocal<RiverSample> SAMPLE =
+            ThreadLocal.withInitial(RiverSample::new);
 
     /** End-tuned defaults: sparse rivers, narrow beds, shallow valleys, occasional forks. */
     public static EndRiverMap defaults() {
@@ -121,13 +130,23 @@ public record EndRiverMap(float cellSize, float riverChance, float bedWidth,
      *         passes through; unchanged {@code inputHeight} otherwise
      */
     public float modifyHeight(float x, float z, int seed, EndHeightmap heightmap, float inputHeight) {
+        return modifyHeight(x, z, seed, heightmap, inputHeight,
+                heightmap.getLandness(x, z, seed));
+    }
+
+    /**
+     * Carves a river using the caller's already-sampled continent landness.
+     * The supplied value must describe this exact world coordinate; density
+     * sampling uses this overload to avoid re-evaluating the continent noise.
+     */
+    public float modifyHeight(float x, float z, int seed, EndHeightmap heightmap,
+                              float inputHeight, float landness) {
         // Degenerate config guard: cellSize<=0 would make invCell=Inf and
         // poison the worley scan with NaN. No-op instead.
         if (cellSize <= 0.0F) {
             return inputHeight;
         }
         // Rivers only exist on land — void stays void.
-        float landness = heightmap.getLandness(x, z, seed);
         if (landness <= 0.0F) {
             return inputHeight;
         }
@@ -299,7 +318,7 @@ public record EndRiverMap(float cellSize, float riverChance, float bedWidth,
             return null;
         }
         float tNormalized = nearest.normaliseT(nearestT);
-        return new RiverSample(nearest, nearestDist, nearestT, tNormalized);
+        return SAMPLE.get().set(nearest, nearestDist, tNormalized);
     }
 
     /**
@@ -321,6 +340,10 @@ public record EndRiverMap(float cellSize, float riverChance, float bedWidth,
      * every sample.
      */
     private RiverSegment[] buildRiver(int seed, int cx, int cz) {
+        return CELL_CACHE.get().segments(this, seed, cx, cz);
+    }
+
+    private RiverSegment[] createRiverSegments(int seed, int cx, int cz) {
         // Cell centre in world space, with a small hash-driven jitter so
         // sources don't sit on a perfect grid.
         float jitterX = (NoiseMath.valCoord2D(seed + 0x9E3779B1, cx, cz)) * 0.15F * cellSize;
@@ -392,7 +415,67 @@ public record EndRiverMap(float cellSize, float riverChance, float bedWidth,
         }
     }
 
-    /** A sampled river reach: the segment, perpendicular distance, projection, and normalised projection. */
-    private record RiverSample(RiverSegment segment, float distance, float t, float tNormalized) {
+    /**
+     * Per-worker mutable result for the allocation-sensitive river scan.
+     *
+     * <p>The sample never escapes the calling height query. Raw terrain
+     * sampling uses {@code getTerrainHeight}, so it cannot re-enter this scan
+     * and overwrite the thread-local result before the caller consumes it.</p>
+     */
+    private static final class RiverSample {
+        private RiverSegment segment;
+        private float distance;
+        private float tNormalized;
+
+        private RiverSample set(RiverSegment segment, float distance, float tNormalized) {
+            this.segment = segment;
+            this.distance = distance;
+            this.tNormalized = tNormalized;
+            return this;
+        }
+    }
+
+    /**
+     * Per-worker cache for immutable river cell geometry. It is static so
+     * short-lived density-function bindings do not accumulate ThreadLocal
+     * entries; switching the owner invalidates stale config or world state.
+     */
+    private static final class RiverCellCache {
+        private final boolean[] initialized = new boolean[CELL_CACHE_SIZE];
+        private final int[] seeds = new int[CELL_CACHE_SIZE];
+        private final int[] cellXs = new int[CELL_CACHE_SIZE];
+        private final int[] cellZs = new int[CELL_CACHE_SIZE];
+        private final RiverSegment[][] segments = new RiverSegment[CELL_CACHE_SIZE][];
+        private EndRiverMap owner;
+
+        private RiverSegment[] segments(EndRiverMap map, int seed, int cellX, int cellZ) {
+            if (this.owner != map) {
+                this.owner = map;
+                Arrays.fill(this.initialized, false);
+            }
+
+            int index = cacheIndex(seed, cellX, cellZ);
+            if (this.initialized[index] && this.seeds[index] == seed
+                    && this.cellXs[index] == cellX && this.cellZs[index] == cellZ) {
+                return this.segments[index];
+            }
+
+            this.seeds[index] = seed;
+            this.cellXs[index] = cellX;
+            this.cellZs[index] = cellZ;
+            this.segments[index] = map.createRiverSegments(seed, cellX, cellZ);
+            this.initialized[index] = true;
+            return this.segments[index];
+        }
+
+        private static int cacheIndex(int seed, int cellX, int cellZ) {
+            int hash = seed;
+            hash = 31 * hash + cellX;
+            hash = 31 * hash + cellZ;
+            hash ^= hash >>> 16;
+            hash *= 0x7feb352d;
+            hash ^= hash >>> 15;
+            return hash & CELL_CACHE_MASK;
+        }
     }
 }

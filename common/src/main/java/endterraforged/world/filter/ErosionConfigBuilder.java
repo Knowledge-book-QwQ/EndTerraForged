@@ -10,17 +10,19 @@ package endterraforged.world.filter;
 
 import java.util.Objects;
 
+import com.mojang.serialization.DataResult;
+
 /**
  * Mutable builder for {@link ErosionConfig}, mirroring {@code EndPresetBuilder}'s
  * pattern: the GUI's erosion sub-editor binds sliders to the setters, and
- * {@link #build()} snapshots the current state into an immutable
+ * {@link #build()} snapshots and validates the current state into an immutable
  * {@link ErosionConfig} for the worldgen pipeline.
  *
  * <p><b>Why this exists.</b> {@link ErosionConfig} is an immutable POJO with
  * public final fields, so a GUI editor cannot mutate it in place while the
  * user drags sliders. This builder mirrors the six fields as mutable
  * private fields with fluent setters; the GUI binds sliders to the setters,
- * and {@link #build()} snapshots state into an immutable
+ * and {@link #build()} snapshots and validates state into an immutable
  * {@link ErosionConfig}.</p>
  *
  * <p><b>Pure logic.</b> This class has zero Minecraft / DFU dependencies —
@@ -60,10 +62,17 @@ public final class ErosionConfigBuilder {
         this.depositRate = source.depositRate;
     }
 
-    /** Snapshots the current state into an immutable {@link ErosionConfig}. */
+    /** Snapshots and validates the current state into an immutable {@link ErosionConfig}. */
     public ErosionConfig build() {
-        return new ErosionConfig(dropletsPerChunk, dropletLifetime, dropletVolume,
+        ErosionConfig config = new ErosionConfig(dropletsPerChunk, dropletLifetime, dropletVolume,
                 dropletVelocity, erosionRate, depositRate);
+        DataResult<ErosionConfig> result = ErosionConfigValidator.validate(config);
+        return result.result().orElseThrow(() -> invalidState(result));
+    }
+
+    private static IllegalStateException invalidState(DataResult<?> result) {
+        String message = result.error().map(error -> error.message()).orElse("unknown validation error");
+        return new IllegalStateException("invalid erosion config builder state: " + message);
     }
 
     /** Resets every field to {@link ErosionConfig#DEFAULT}. */

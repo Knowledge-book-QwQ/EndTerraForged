@@ -20,9 +20,11 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.level.storage.LevelStorageSource;
 
 import endterraforged.EndTerraForged;
+import endterraforged.world.climate.EndClimateAccess;
 import endterraforged.world.config.EndPreset;
 import endterraforged.world.config.EndPresetAccess;
 import endterraforged.world.config.EndPresetStorage;
+import endterraforged.world.level.biome.EndBiomeLayoutAccess;
 
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
@@ -264,17 +266,23 @@ public class MixinMinecraftServer {
         // false return is non-fatal: the world's chunk save completed
         // successfully (vanilla's saveEverything handled that); only the
         // preset file wasn't updated. The next save tick will retry.
-        EndPresetStorage.save(worldDir, preset);
+        if (!EndPresetStorage.save(worldDir, preset)) {
+            EndTerraForged.LOGGER.warn(
+                    "EndTerraForged preset file at {} could not be saved; "
+                            + "the next save tick will retry.",
+                    worldDir);
+        }
     }
 
     /**
-     * Clears the {@link EndPresetAccess} holder when the server shuts down,
-     * preventing a stale preset from leaking into the next world loaded
-     * in the same JVM session.
+     * Clears process-wide EndTerraForged runtime holders when the server
+     * shuts down, preventing stale preset and runtime state from leaking into
+     * the next world loaded in the same JVM session.
      *
-     * <p><b>The problem.</b> {@link EndPresetAccess} is a process-wide
-     * {@code volatile} holder. Without this clear, the following
-     * single-player flow leaks a stale preset:</p>
+     * <p><b>The problem.</b> {@link EndPresetAccess}, {@link EndClimateAccess},
+     * and {@link EndBiomeLayoutAccess} are process-wide {@code volatile}
+     * holders. Without this clear, the following single-player flow leaks
+     * stale state:</p>
      * <ol>
      *   <li>User creates world A in the GUI, edits preset to presetA,
      *       clicks Done — {@code EndPresetAccess.set(presetA)}</li>
@@ -320,12 +328,11 @@ public class MixinMinecraftServer {
      * {@code set} repopulates it cleanly — no race.</p>
      */
     @Inject(method = "halt", at = @At("RETURN"))
-    private void endTerraForged$clearPresetHolderOnServerHalt(CallbackInfo ci) {
-        // Drop the published preset so the next world load in the same JVM
-        // session starts from a clean slate — either the GUI sets a new
-        // one (single-player create flow) or the load-path Mixin reads
-        // the world's preset file (world re-open), or MixinRandomState
-        // falls back to EndPreset.defaults() (never-configured fresh load).
-        EndPresetAccess.set(null);
+    private void endTerraForged$clearRuntimeHoldersOnServerHalt(CallbackInfo ci) {
+        // Drop the published runtime state so the next world load in the
+        // same JVM session starts from a clean slate.
+        EndPresetAccess.clear();
+        EndClimateAccess.clear();
+        EndBiomeLayoutAccess.clear();
     }
 }

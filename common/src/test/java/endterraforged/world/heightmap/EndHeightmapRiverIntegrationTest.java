@@ -5,6 +5,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import org.junit.jupiter.api.Test;
 
+import endterraforged.world.climate.ClimateModulator;
+import endterraforged.world.climate.EndClimate;
 import endterraforged.world.config.TestProfile;
 import endterraforged.world.lake.EndLakeMap;
 import endterraforged.world.river.EndRiverMap;
@@ -146,6 +148,27 @@ class EndHeightmapRiverIntegrationTest {
         }
     }
 
+    @Test
+    void knownLandnessCarversMatchStandaloneLookupPath() {
+        EndHeightmap map = new EndHeightmap(TestProfile.defaultEnd(), SEED);
+        EndRiverMap rivers = EndRiverMap.defaults();
+        EndLakeMap lakes = EndLakeMap.defaults();
+
+        for (int i = 0; i < SAMPLES; i++) {
+            float x = x(i);
+            float z = z(i);
+            float input = map.getTerrainHeight(x, z, SEED);
+            float landness = map.getLandness(x, z, SEED);
+
+            assertEquals(rivers.modifyHeight(x, z, SEED, map, input),
+                    rivers.modifyHeight(x, z, SEED, map, input, landness), 0.0F,
+                    "known landness must preserve river carving");
+            assertEquals(lakes.modifyHeight(x, z, SEED, map, input),
+                    lakes.modifyHeight(x, z, SEED, map, input, landness), 0.0F,
+                    "known landness must preserve lake carving");
+        }
+    }
+
     // ----- stage-4.5: lake integration + river→lake chaining --------------
 
     @Test
@@ -235,6 +258,20 @@ class EndHeightmapRiverIntegrationTest {
         }
         assertTrue(carvedBySomething > 0,
                 "river+lake chain should carve at least some land");
+    }
+
+    @Test
+    void fullHeightChainNeverDropsBelowReferenceSurface() {
+        EndHeightmap chained = new EndHeightmap(TestProfile.defaultEnd(), SEED)
+                .withClimate(ClimateModulator.defaults(EndClimate.defaults(SEED)))
+                .withRivers(new EndRiverMap(380, 1.0F, 12, 90, 0.4F))
+                .withLakes(new EndLakeMap(620, 1.0F, 28, 75, 0.4F));
+        float surface = chained.levels().surface;
+
+        for (int i = 0; i < SAMPLES; i++) {
+            assertTrue(chained.getHeight(x(i), z(i), SEED) >= surface,
+                    "climate, river, and lake chaining must preserve the surface lower bound");
+        }
     }
 
     @Test

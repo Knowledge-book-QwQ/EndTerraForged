@@ -12,6 +12,8 @@
  */
 package endterraforged.world.floatingislands;
 
+import java.util.Arrays;
+
 import endterraforged.world.heightmap.EndLevels;
 import endterraforged.world.noise.Noise;
 import endterraforged.world.noise.NoiseMath;
@@ -52,8 +54,9 @@ import endterraforged.world.noise.Noises;
  * {@link endterraforged.world.config.DimensionProfile}; when false, the
  * Mixin does not apply this layer at all.</p>
  *
- * <p><b>Thread safety.</b> Immutable record; the worley scan is stateless.
- * Safe to query from parallel chunk-gen threads.</p>
+ * <p><b>Thread safety.</b> The field is immutable. Horizontal Worley results
+ * use a bounded per-thread cache, so parallel chunk-gen workers never share
+ * mutable sample state.</p>
  *
  * @param cellSize      worley cell size in blocks; smaller = denser island grid
  * @param islandChance  fraction of cells that host an island, in {@code [0,1]}
@@ -63,8 +66,14 @@ import endterraforged.world.noise.Noises;
  * @param verticalScale Gaussian std-dev in blocks; smaller = thinner lens
  */
 public record FloatingIslandsField(float cellSize, float islandChance,
-                                   float coreRadius, float shellRadius,
-                                   float centerY, float verticalScale) {
+                                    float coreRadius, float shellRadius,
+                                    float centerY, float verticalScale) {
+
+    private static final int COLUMN_CACHE_SIZE = 64;
+    private static final int COLUMN_CACHE_MASK = COLUMN_CACHE_SIZE - 1;
+    private static final float MAX_VERTICAL_SIGMAS = 3.1F;
+    private static final ThreadLocal<ColumnCache> COLUMN_CACHE =
+            ThreadLocal.withInitial(ColumnCache::new);
 
     /** End-tuned defaults: sparse, modest islands floating around Y=120. */
     public static FloatingIslandsField defaults() {
@@ -82,29 +91,38 @@ public record FloatingIslandsField(float cellSize, float islandChance,
      *         {@code 0.0} if no island is near or the cell hosts none
      */
     public float solidity(float x, float worldY, float z, int seed) {
-        // Degenerate config guard — mirrors EndRiverMap/EndLakeMap.
-        if (cellSize <= 0.0F) {
+        // A density function treats every positive value as solid. Limit the
+        // Gaussian tail to a finite support so a lens cannot become a very
+        // thin, effectively unbounded column in a tall End dimension.
+        float vertical = verticalStrength(worldY);
+        if (vertical <= 0.0F) {
             return 0.0F;
         }
 
-        float[] centre = nearestIslandCentre(x, z, seed);
-        if (centre == null) {
-            return 0.0F;
-        }
-
-        float dx = x - centre[0];
-        float dz = z - centre[1];
-        float r = (float) Math.sqrt(dx * dx + dz * dz);
-        float radial = radialFalloff(r);
+        float radial = horizontalStrength(x, z, seed);
         if (radial <= 0.0F) {
             return 0.0F;
         }
-
-        float dy = worldY - centerY;
-        // Gaussian: exp(-dy²/(2σ²)). At dy=0 → 1.0; at dy=±2σ → ~0.135.
-        float vertical = (float) Math.exp(-(dy * dy) / (2.0F * verticalScale * verticalScale));
-
         return NoiseMath.clamp(radial * vertical, 0.0F, 1.0F);
+    }
+
+    private float horizontalStrength(float x, float z, int seed) {
+        if (cellSize <= 0.0F || islandChance <= 0.0F) {
+            return 0.0F;
+        }
+        return COLUMN_CACHE.get().horizontalStrength(this, x, z, seed);
+    }
+
+    private float verticalStrength(float worldY) {
+        if (verticalScale <= 0.0F) {
+            return 0.0F;
+        }
+        float dy = worldY - centerY;
+        if (Math.abs(dy) > verticalScale * MAX_VERTICAL_SIGMAS) {
+            return 0.0F;
+        }
+        // Gaussian: exp(-dy²/(2σ²)). At dy=0 → 1.0; at dy=±2σ → ~0.135.
+        return (float) Math.exp(-(dy * dy) / (2.0F * verticalScale * verticalScale));
     }
 
     /**
@@ -124,18 +142,16 @@ public record FloatingIslandsField(float cellSize, float islandChance,
 
     /**
      * Scans the 3×3 worley neighbourhood of {@code (x, z)} for the nearest
-     * island centre. Returns {@code null} if no cell in the neighbourhood
-     * hosts an island.
+     * island centre and returns its radial falloff. The result is cached by
+     * {@link ColumnCache}; this method stays allocation-free because it is on
+     * the world-generation density hot path.
      */
-    private float[] nearestIslandCentre(float x, float z, int seed) {
+    private float uncachedHorizontalStrength(float x, float z, int seed) {
         float invCell = 1.0F / cellSize;
         int cellX = NoiseMath.floor(x * invCell);
         int cellZ = NoiseMath.floor(z * invCell);
 
-        float nearestCx = 0.0F;
-        float nearestCz = 0.0F;
         float nearestDist = Float.MAX_VALUE;
-        boolean found = false;
 
         for (int dz = -1; dz <= 1; dz++) {
             for (int dx = -1; dx <= 1; dx++) {
@@ -153,17 +169,14 @@ public record FloatingIslandsField(float cellSize, float islandChance,
                 float dist = ddx * ddx + ddz * ddz;
                 if (dist < nearestDist) {
                     nearestDist = dist;
-                    nearestCx = centreX;
-                    nearestCz = centreZ;
-                    found = true;
                 }
             }
         }
 
-        if (!found) {
-            return null;
+        if (nearestDist == Float.MAX_VALUE) {
+            return 0.0F;
         }
-        return new float[]{nearestCx, nearestCz};
+        return radialFalloff((float) Math.sqrt(nearestDist));
     }
 
     /**
@@ -175,5 +188,51 @@ public record FloatingIslandsField(float cellSize, float islandChance,
                 (NoiseMath.valCoord2D(seed ^ 0x7A3C5F11, cx, cz) + 1.0F) * 0.5F,
                 0.0F, 1.0F);
         return h < islandChance;
+    }
+
+    /**
+     * Per-worker cache for expensive 3×3 Worley scans. It is static so
+     * short-lived density-function bindings do not leave one ThreadLocal map
+     * entry per generated chunk; the owner reset keeps different worlds safe.
+     */
+    private static final class ColumnCache {
+        private final boolean[] initialized = new boolean[COLUMN_CACHE_SIZE];
+        private final int[] xBits = new int[COLUMN_CACHE_SIZE];
+        private final int[] zBits = new int[COLUMN_CACHE_SIZE];
+        private final int[] seeds = new int[COLUMN_CACHE_SIZE];
+        private final float[] strengths = new float[COLUMN_CACHE_SIZE];
+        private FloatingIslandsField owner;
+
+        private float horizontalStrength(FloatingIslandsField field, float x, float z, int seed) {
+            if (this.owner != field) {
+                this.owner = field;
+                Arrays.fill(this.initialized, false);
+            }
+
+            int nextXBits = Float.floatToIntBits(x);
+            int nextZBits = Float.floatToIntBits(z);
+            int index = cacheIndex(nextXBits, nextZBits, seed);
+            if (this.initialized[index] && this.xBits[index] == nextXBits
+                    && this.zBits[index] == nextZBits && this.seeds[index] == seed) {
+                return this.strengths[index];
+            }
+
+            this.xBits[index] = nextXBits;
+            this.zBits[index] = nextZBits;
+            this.seeds[index] = seed;
+            this.strengths[index] = field.uncachedHorizontalStrength(x, z, seed);
+            this.initialized[index] = true;
+            return this.strengths[index];
+        }
+
+        private static int cacheIndex(int xBits, int zBits, int seed) {
+            int hash = xBits;
+            hash = 31 * hash + zBits;
+            hash = 31 * hash + seed;
+            hash ^= hash >>> 16;
+            hash *= 0x7feb352d;
+            hash ^= hash >>> 15;
+            return hash & COLUMN_CACHE_MASK;
+        }
     }
 }

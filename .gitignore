@@ -18,6 +18,10 @@ atlassian-ide-plugin.xml
 
 # Log file
 *.log
+**/logs/
+**/crash-reports/
+crash-*.txt
+*.hprof
 
 # BlueJ files
 *.ctxt
@@ -128,8 +132,26 @@ run/
 *.launch
 
 # Environment-generated reference docs (e.g. style guides) — not part of the
-# project source tree and should never be committed.
-docs/
+# project source tree and should never be committed. Project docs under docs/
+# are tracked; generated scratch material must stay in docs/generated/.
+/docs/generated/
 
 # Local reference clones of upstream projects kept for development only.
 /ReTerraForged-R8.3-ref/
+/RTF参考/
+
+# Local third-party client configuration captured from the smoke-test instance.
+/config/
+/acceleratedRecoiling.json
+
+# Local code intelligence index.
+/.codegraph/
+
+# Local Codex workspace settings.
+/.codex/
+
+# Local sandboxed Gradle temp directory used during verification.
+/.gradle-tmp/
+
+# Local Gradle user home used for sandboxed verification cache.
+/.gradle-home/

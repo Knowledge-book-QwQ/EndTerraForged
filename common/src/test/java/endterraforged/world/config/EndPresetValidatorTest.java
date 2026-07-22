@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 import com.mojang.serialization.DataResult;
 
 import endterraforged.world.filter.ErosionConfig;
+import endterraforged.world.noise.DistanceFunction;
 
 /**
  * Contract tests for {@link EndPresetValidator}: the pure-logic validator
@@ -163,7 +164,7 @@ class EndPresetValidatorTest {
     @Test
     void minYAtMinimumIsValid() {
         // -2032 is the boundary — vanilla DimensionType lower bound.
-        EndPreset preset = withMinY(EndPreset.defaults(), -2032);
+        EndPreset preset = withMinY(maxEnvelopePreset(), -2032);
         DataResult<EndPreset> result = EndPresetValidator.validate(preset);
         assertTrue(result.isSuccess(),
                 "min_y = -2032 (vanilla minimum) must be valid");
@@ -216,6 +217,8 @@ class EndPresetValidatorTest {
         // This is the EndTerraForged default.
         EndPreset preset = new EndPreset(4064, -2032, 0, 0,
                 SeaMode.NONE, TopologyMode.ISLANDS, false,
+                ContinentConfig.defaults(),
+                TerrainConfig.DEFAULT,
                 ErosionConfig.DEFAULT);
         DataResult<EndPreset> result = EndPresetValidator.validate(preset);
         assertTrue(result.isSuccess(),
@@ -228,6 +231,8 @@ class EndPresetValidatorTest {
         // constraint even though worldHeight alone is in range.
         EndPreset preset = new EndPreset(4064, 0, 0, 0,
                 SeaMode.NONE, TopologyMode.ISLANDS, false,
+                ContinentConfig.defaults(),
+                TerrainConfig.DEFAULT,
                 ErosionConfig.DEFAULT);
         DataResult<EndPreset> result = EndPresetValidator.validate(preset);
         assertFalse(result.isSuccess(),
@@ -247,7 +252,7 @@ class EndPresetValidatorTest {
     @Test
     void seaLevelYAtLowerBoundIsValid() {
         // seaLevelY = minY = -2032 — boundary, valid.
-        EndPreset preset = withSeaLevelY(EndPreset.defaults(), -2032);
+        EndPreset preset = withSeaLevelY(maxEnvelopePreset(), -2032);
         DataResult<EndPreset> result = EndPresetValidator.validate(preset);
         assertTrue(result.isSuccess(),
                 "sea_level_y = minY (lower bound) must be valid");
@@ -256,7 +261,7 @@ class EndPresetValidatorTest {
     @Test
     void seaLevelYAtUpperBoundIsValid() {
         // seaLevelY = minY + worldHeight - 1 = -2032 + 4064 - 1 = 2031.
-        EndPreset preset = withSeaLevelY(EndPreset.defaults(), 2031);
+        EndPreset preset = withSeaLevelY(maxEnvelopePreset(), 2031);
         DataResult<EndPreset> result = EndPresetValidator.validate(preset);
         assertTrue(result.isSuccess(),
                 "sea_level_y = maxY (upper bound) must be valid");
@@ -265,7 +270,7 @@ class EndPresetValidatorTest {
     @Test
     void seaLevelYBelowLowerBoundIsInvalid() {
         // seaLevelY = -2033 — below minY=-2032.
-        EndPreset preset = withSeaLevelY(EndPreset.defaults(), -2033);
+        EndPreset preset = withSeaLevelY(maxEnvelopePreset(), -2033);
         DataResult<EndPreset> result = EndPresetValidator.validate(preset);
         assertFalse(result.isSuccess(),
                 "sea_level_y below minY must be rejected");
@@ -279,7 +284,7 @@ class EndPresetValidatorTest {
     void seaLevelYAboveUpperBoundIsInvalid() {
         // seaLevelY = 2032 — equal to minY + worldHeight, which is
         // outside the bounds (max valid is 2031).
-        EndPreset preset = withSeaLevelY(EndPreset.defaults(), 2032);
+        EndPreset preset = withSeaLevelY(maxEnvelopePreset(), 2032);
         DataResult<EndPreset> result = EndPresetValidator.validate(preset);
         assertFalse(result.isSuccess(),
                 "sea_level_y >= minY + worldHeight must be rejected");
@@ -294,7 +299,7 @@ class EndPresetValidatorTest {
 
     @Test
     void islandBaselineYAtLowerBoundIsValid() {
-        EndPreset preset = withIslandBaselineY(EndPreset.defaults(), -2032);
+        EndPreset preset = withIslandBaselineY(maxEnvelopePreset(), -2032);
         DataResult<EndPreset> result = EndPresetValidator.validate(preset);
         assertTrue(result.isSuccess(),
                 "island_baseline_y = minY (lower bound) must be valid");
@@ -302,7 +307,7 @@ class EndPresetValidatorTest {
 
     @Test
     void islandBaselineYAtUpperBoundIsValid() {
-        EndPreset preset = withIslandBaselineY(EndPreset.defaults(), 2031);
+        EndPreset preset = withIslandBaselineY(maxEnvelopePreset(), 2031);
         DataResult<EndPreset> result = EndPresetValidator.validate(preset);
         assertTrue(result.isSuccess(),
                 "island_baseline_y = maxY (upper bound) must be valid");
@@ -310,7 +315,7 @@ class EndPresetValidatorTest {
 
     @Test
     void islandBaselineYBelowLowerBoundIsInvalid() {
-        EndPreset preset = withIslandBaselineY(EndPreset.defaults(), -2033);
+        EndPreset preset = withIslandBaselineY(maxEnvelopePreset(), -2033);
         DataResult<EndPreset> result = EndPresetValidator.validate(preset);
         assertFalse(result.isSuccess(),
                 "island_baseline_y below minY must be rejected");
@@ -321,7 +326,7 @@ class EndPresetValidatorTest {
 
     @Test
     void islandBaselineYAboveUpperBoundIsInvalid() {
-        EndPreset preset = withIslandBaselineY(EndPreset.defaults(), 2032);
+        EndPreset preset = withIslandBaselineY(maxEnvelopePreset(), 2032);
         DataResult<EndPreset> result = EndPresetValidator.validate(preset);
         assertFalse(result.isSuccess(),
                 "island_baseline_y >= minY + worldHeight must be rejected");
@@ -341,6 +346,8 @@ class EndPresetValidatorTest {
         // config, not a top-level preset field.
         EndPreset preset = new EndPreset(4064, -2032, 0, 0,
                 SeaMode.NONE, TopologyMode.ISLANDS, false,
+                ContinentConfig.defaults(),
+                TerrainConfig.DEFAULT,
                 new ErosionConfig(-1, 32, 1.0F, 1.0F, 0.5F, 0.5F));
         DataResult<EndPreset> result = EndPresetValidator.validate(preset);
         assertFalse(result.isSuccess(),
@@ -355,12 +362,62 @@ class EndPresetValidatorTest {
     }
 
     @Test
+    void invalidContinentConfigSurfacesFromEndPresetValidator() {
+        EndPreset preset = new EndPreset(4064, -2032, 0, 0,
+                SeaMode.NONE, TopologyMode.ISLANDS, false,
+                new ContinentConfig(8, 800, DistanceFunction.EUCLIDEAN,
+                        1.0F, 0.25F, 0.25F, 5, 0.26F, 4.33F,
+                        1.0F, 0.6F, 0.5F, 0.6F, 0.85F, 300, 40.0F),
+                TerrainConfig.DEFAULT,
+                ErosionConfig.DEFAULT);
+        DataResult<EndPreset> result = EndPresetValidator.validate(preset);
+        assertFalse(result.isSuccess(),
+                "an EndPreset with an invalid ContinentConfig must be rejected");
+        String msg = result.error().orElseThrow().message();
+        assertTrue(msg.contains("continent config invalid"));
+        assertTrue(msg.contains("islands_scale"));
+    }
+
+    @Test
+    void invalidTerrainConfigSurfacesFromEndPresetValidator() {
+        EndPreset preset = new EndPreset(4064, -2032, 0, 0,
+                SeaMode.NONE, TopologyMode.ISLANDS, false,
+                ContinentConfig.defaults(),
+                new TerrainConfig(1.0F, 6.0F),
+                ErosionConfig.DEFAULT);
+        DataResult<EndPreset> result = EndPresetValidator.validate(preset);
+        assertFalse(result.isSuccess(),
+                "an EndPreset with an invalid TerrainConfig must be rejected");
+        String msg = result.error().orElseThrow().message();
+        assertTrue(msg.contains("terrain config invalid"));
+        assertTrue(msg.contains("global_horizontal_scale"));
+    }
+
+    @Test
+    void invalidClimateConfigSurfacesFromEndPresetValidator() {
+        EndPreset preset = new EndPreset(4064, -2032, 0, 0,
+                SeaMode.NONE, TopologyMode.ISLANDS, false,
+                ContinentConfig.defaults(),
+                TerrainConfig.DEFAULT,
+                new ClimateConfig(0.0F, 600, 800, 1000, 0.25F),
+                ErosionConfig.DEFAULT);
+        DataResult<EndPreset> result = EndPresetValidator.validate(preset);
+        assertFalse(result.isSuccess(),
+                "an EndPreset with an invalid ClimateConfig must be rejected");
+        String msg = result.error().orElseThrow().message();
+        assertTrue(msg.contains("climate config invalid"));
+        assertTrue(msg.contains("climate_radius"));
+    }
+
+    @Test
     void invalidErosionRateSurfacesFromEndPresetValidator() {
         // Same delegation, different field — guards against the
         // validator skipping the erosion check on success of the
         // parent fields.
         EndPreset preset = new EndPreset(4064, -2032, 0, 0,
                 SeaMode.NONE, TopologyMode.ISLANDS, false,
+                ContinentConfig.defaults(),
+                TerrainConfig.DEFAULT,
                 new ErosionConfig(128, 32, 1.0F, 1.0F, 1.5F, 0.5F));
         DataResult<EndPreset> result = EndPresetValidator.validate(preset);
         assertFalse(result.isSuccess());
@@ -379,6 +436,8 @@ class EndPresetValidatorTest {
         // — keeping the error message focused on one fix at a time.
         EndPreset preset = new EndPreset(15, -2033, 99999, -99999,
                 SeaMode.NONE, TopologyMode.ISLANDS, false,
+                ContinentConfig.defaults(),
+                TerrainConfig.DEFAULT,
                 new ErosionConfig(-1, 0, -1.0F, -1.0F, 2.0F, 2.0F));
         DataResult<EndPreset> result = EndPresetValidator.validate(preset);
         assertFalse(result.isSuccess());
@@ -421,7 +480,16 @@ class EndPresetValidatorTest {
     private static EndPreset fullyCustomPreset() {
         return new EndPreset(384, -64, 63, 100,
                 SeaMode.WITH_FLOOR, TopologyMode.CONTINENTAL_SHATTERED, true,
+                ContinentConfig.defaults(),
+                new TerrainConfig(0.75F, 2.5F),
+                new ClimateConfig(6000.0F, 900, 1200, 1500, 0.4F),
                 new ErosionConfig(200, 40, 1.5F, 1.2F, 0.7F, 0.3F));
+    }
+
+    private static EndPreset maxEnvelopePreset() {
+        return new EndPreset(4064, -2032, 0, 0,
+                SeaMode.NONE, TopologyMode.ISLANDS, false,
+                ContinentConfig.defaults(), TerrainConfig.DEFAULT, ErosionConfig.DEFAULT);
     }
 
     /**
@@ -433,24 +501,32 @@ class EndPresetValidatorTest {
     private static EndPreset withWorldHeight(EndPreset base, int worldHeight, int minY) {
         return new EndPreset(worldHeight, minY, base.seaLevelY(), base.islandBaselineY(),
                 base.seaMode(), base.topologyMode(), base.floatingIslandsEnabled(),
+                base.continentConfig(),
+                base.terrainConfig(),
                 base.erosionConfig());
     }
 
     private static EndPreset withMinY(EndPreset base, int minY) {
         return new EndPreset(base.worldHeight(), minY, base.seaLevelY(), base.islandBaselineY(),
                 base.seaMode(), base.topologyMode(), base.floatingIslandsEnabled(),
+                base.continentConfig(),
+                base.terrainConfig(),
                 base.erosionConfig());
     }
 
     private static EndPreset withSeaLevelY(EndPreset base, int seaLevelY) {
         return new EndPreset(base.worldHeight(), base.minY(), seaLevelY, base.islandBaselineY(),
                 base.seaMode(), base.topologyMode(), base.floatingIslandsEnabled(),
+                base.continentConfig(),
+                base.terrainConfig(),
                 base.erosionConfig());
     }
 
     private static EndPreset withIslandBaselineY(EndPreset base, int islandBaselineY) {
         return new EndPreset(base.worldHeight(), base.minY(), base.seaLevelY(), islandBaselineY,
                 base.seaMode(), base.topologyMode(), base.floatingIslandsEnabled(),
+                base.continentConfig(),
+                base.terrainConfig(),
                 base.erosionConfig());
     }
 }

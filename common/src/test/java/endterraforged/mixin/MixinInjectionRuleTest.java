@@ -238,7 +238,7 @@ class MixinInjectionRuleTest {
             }
         }
         // Sanity: we must have scanned at least 4 mixins (MixinRandomState,
-        // MixinNoiseChunk, MixinMinecraftServer, MixinPresetEditor) and
+        // MixinNoiseChunk, MixinMinecraftServer, MixinCreateWorldScreen) and
         // found at least 5 @Inject handlers (1 in RandomState.create, 1 in
         // RandomState.<init>, 1 in NoiseChunk.<init>, 3 in MinecraftServer).
         // If this assertion fails the regex parser is missing handlers.
@@ -550,13 +550,12 @@ class MixinInjectionRuleTest {
 
     /**
      * Sanity check: the {@code client} mixin array contains
-     * {@link MixinPresetEditor} — this is the entry point that wires
-     * the EndTerraForged preset editor into vanilla's "Customize" button
-     * on the create-world screen. If it's missing, the user has no way
-     * to reach the editor from the create-world flow.
+     * {@link MixinCreateWorldScreen} — this is the standalone entry point
+     * that opens the EndTerraForged editor without taking the globally shared
+     * vanilla "Customize" slot from another world-generator mod.
      */
     @Test
-    void clientArrayContainsPresetEditorMixin() throws Exception {
+    void clientArrayContainsCreateWorldScreenMixin() throws Exception {
         JsonObject config = loadMixinConfig("/endterraforged-common.mixins.json");
         assertNotNull(config.get("client"),
                 "endterraforged-common.mixins.json must have a 'client' array "
@@ -565,16 +564,16 @@ class MixinInjectionRuleTest {
         JsonArray client = config.getAsJsonArray("client");
         boolean found = false;
         for (JsonElement e : client) {
-            if ("MixinPresetEditor".equals(e.getAsString())) {
+            if ("MixinCreateWorldScreen".equals(e.getAsString())) {
                 found = true;
                 break;
             }
         }
         assertTrue(found,
                 "endterraforged-common.mixins.json 'client' array must "
-                        + "contain 'MixinPresetEditor' — without it the "
+                        + "contain 'MixinCreateWorldScreen' — without it the "
                         + "EndTerraForged preset editor is unreachable "
-                        + "from the create-world screen's 'Customize' button.");
+                        + "from the create-world screen.");
     }
 
     /**

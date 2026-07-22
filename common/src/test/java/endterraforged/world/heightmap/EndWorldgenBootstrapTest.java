@@ -11,16 +11,22 @@ import java.util.function.BiFunction;
 import java.util.function.Function;
 
 import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import endterraforged.world.climate.EndClimate;
 import endterraforged.world.climate.EndClimateAccess;
+import endterraforged.world.config.AbyssPitConfig;
+import endterraforged.world.config.ClimateConfig;
+import endterraforged.world.config.ContinentConfig;
 import endterraforged.world.config.EndPreset;
 import endterraforged.world.config.SeaMode;
+import endterraforged.world.config.SubsurfaceConfig;
+import endterraforged.world.config.TerrainConfig;
 import endterraforged.world.config.TopologyMode;
 import endterraforged.world.floatingislands.FloatingIslandsField;
 import endterraforged.world.filter.ErosionConfig;
+import endterraforged.world.level.biome.EndBiomeLayout;
+import endterraforged.world.level.biome.EndBiomeLayoutAccess;
 
 /**
  * Contract tests for {@link EndWorldgenBootstrap}: the stage-6.3 fallback
@@ -79,6 +85,7 @@ class EndWorldgenBootstrapTest {
     @AfterEach
     void clearClimateHolder() {
         EndClimateAccess.clear();
+        EndBiomeLayoutAccess.clear();
     }
 
     // ------------------------------------------------------------------
@@ -131,6 +138,121 @@ class EndWorldgenBootstrapTest {
                 "bootstrap must publish the constructed EndClimate to EndClimateAccess on success");
     }
 
+    @Test
+    void bootstrapUsesActualNoiseSettingsBoundsForLegacyPresetEnvelope() {
+        EndPreset legacyEditorPreset = new EndPreset(2128, -192, 0, 0,
+                SeaMode.NONE, TopologyMode.ISLANDS, false,
+                ContinentConfig.defaults(), TerrainConfig.DEFAULT, ErosionConfig.DEFAULT);
+
+        EndWorldgenBootstrap.Result result = EndWorldgenBootstrap.bootstrap(
+                SEED, legacyEditorPreset, -256, 512);
+
+        assertTrue(result.succeeded());
+        EndLevels levels = result.endDensity().heightmap().levels();
+        assertEquals(-256, levels.minY);
+        assertEquals(512, levels.worldHeight);
+    }
+
+    @Test
+    void bootstrapPreservesExplicitFloorAndContinuousMainlandAcrossBoundsAdjustment() {
+        EndPreset legacyFloorPreset = new EndPreset(2128, -192, 0, 0,
+                SeaMode.WITH_FLOOR, TopologyMode.CONTINENTAL, true,
+                ContinentConfig.legacyDefaults(), TerrainConfig.DEFAULT, ErosionConfig.DEFAULT);
+
+        EndWorldgenBootstrap.Result result = EndWorldgenBootstrap.bootstrap(
+                SEED, legacyFloorPreset, -256, 512);
+
+        assertTrue(result.succeeded());
+        EndDensity density = result.endDensity();
+        assertEquals(1.0F, density.heightmap().getLandness(0.0F, 0.0F, SEED), 0.0F,
+                "CONTINENTAL must remain a continuous mainland after bounds adjustment");
+        assertEquals(1.0F, density.density(0.0F, -256, 0.0F, SEED), 0.0F,
+                "WITH_FLOOR must keep solid terrain at the loaded world bottom");
+    }
+
+    @Test
+    void legacyContinentalFloorPresetStaysSolidAtTheP1OuterBaseline() {
+        long p1Seed = 7286241398135878839L;
+        int noiseSeed = (int) p1Seed;
+        EndPreset legacyFloorPreset = new EndPreset(2128, -192, 0, 0,
+                SeaMode.WITH_FLOOR, TopologyMode.CONTINENTAL, true,
+                ContinentConfig.legacyDefaults(), TerrainConfig.DEFAULT, ErosionConfig.DEFAULT);
+
+        EndWorldgenBootstrap.Result result = EndWorldgenBootstrap.bootstrap(
+                noiseSeed, legacyFloorPreset, -256, 512);
+
+        assertTrue(result.succeeded());
+        assertEquals(1.0F, result.endDensity().heightmap().getLandness(4096.0F, 4096.0F, noiseSeed),
+                0.0F, "CONTINENTAL must cover the fixed outer baseline coordinate");
+        assertEquals(1.0F, result.endDensity().density(4096.0F, -224, 4096.0F, noiseSeed),
+                0.0F, "WITH_FLOOR must be solid at the valid Standard-world bottom baseline");
+    }
+
+    @Test
+    void bootstrapDegradesWhenLegacyReferenceHeightDoesNotFitActualBounds() {
+        EndPreset incompatibleLegacyPreset = new EndPreset(2048, -1024, 768, 0,
+                SeaMode.WITH_FLOOR, TopologyMode.ISLANDS, false,
+                ContinentConfig.defaults(), TerrainConfig.DEFAULT, ErosionConfig.DEFAULT);
+
+        EndWorldgenBootstrap.Result result = EndWorldgenBootstrap.bootstrap(
+                SEED, incompatibleLegacyPreset, -256, 512);
+
+        assertTrue(result.degraded());
+        assertNull(result.endDensity());
+        assertNull(EndClimateAccess.get());
+        assertNull(EndBiomeLayoutAccess.get());
+    }
+
+    @Test
+    void bootstrapPublishesBiomeLayoutOnSuccess() {
+        EndWorldgenBootstrap.Result result =
+                EndWorldgenBootstrap.bootstrap(SEED, EndPreset.defaults());
+
+        assertTrue(result.succeeded());
+        EndBiomeLayout published = EndBiomeLayoutAccess.get();
+        assertNotNull(published,
+                "bootstrap must publish the constructed EndBiomeLayout on success");
+    }
+
+    @Test
+    void bootstrapBuildsClimateFromPresetConfig() {
+        ClimateConfig climateConfig = new ClimateConfig(6000.0F, 900, 1200, 1500, 0.4F);
+        EndPreset profile = new EndPreset(4064, -2032, 0, 0,
+                SeaMode.NONE, TopologyMode.ISLANDS, false,
+                ContinentConfig.defaults(),
+                TerrainConfig.DEFAULT,
+                climateConfig,
+                ErosionConfig.DEFAULT);
+
+        EndWorldgenBootstrap.Result result = EndWorldgenBootstrap.bootstrap(SEED, profile);
+
+        assertTrue(result.succeeded());
+        EndClimate published = EndClimateAccess.get();
+        assertNotNull(published);
+        assertEquals(climateConfig.climateRadius(), published.climateRadius());
+        assertEquals(climateConfig.perturbation(), published.perturbation());
+    }
+
+    @Test
+    void bootstrapBuildsSubsurfaceFromPresetConfig() {
+        SubsurfaceConfig subsurfaceConfig = new SubsurfaceConfig(
+                new AbyssPitConfig(true, 1700, 512, 0.7F, 0.2F, 256, 0.5F));
+        EndPreset profile = new EndPreset(4064, -2032, 0, 0,
+                SeaMode.NONE, TopologyMode.ISLANDS, false,
+                ContinentConfig.defaults(),
+                TerrainConfig.DEFAULT,
+                ClimateConfig.DEFAULT,
+                EndPreset.defaults().biomeLayoutConfig(),
+                subsurfaceConfig,
+                ErosionConfig.DEFAULT);
+
+        EndWorldgenBootstrap.Result result = EndWorldgenBootstrap.bootstrap(SEED, profile);
+
+        assertTrue(result.succeeded());
+        assertNotNull(result.endDensity());
+        assertTrue(result.endDensity().subsurface().enabled());
+    }
+
     // ------------------------------------------------------------------
     //  Success path: floating islands enabled
     // ------------------------------------------------------------------
@@ -151,6 +273,8 @@ class EndWorldgenBootstrapTest {
         EndPreset profile = new EndPreset(
                 4064, -2032, 0, 0,
                 SeaMode.NONE, TopologyMode.ISLANDS, true,
+                ContinentConfig.defaults(),
+                TerrainConfig.DEFAULT,
                 ErosionConfig.DEFAULT);
 
         EndWorldgenBootstrap.Result result = EndWorldgenBootstrap.bootstrap(SEED, profile);
@@ -269,6 +393,7 @@ class EndWorldgenBootstrapTest {
         // that forget the teardown). Use a known non-null climate so the
         // assertion below isn't vacuously true.
         EndClimateAccess.set(EndClimate.defaults(SEED + 1));
+        EndBiomeLayoutAccess.set(EndBiomeLayout.DEFAULT);
         EndClimate preFailure = EndClimateAccess.get();
         assertNotNull(preFailure, "sanity: holder must be populated before bootstrap");
 
@@ -280,6 +405,8 @@ class EndWorldgenBootstrapTest {
                         + "(otherwise stale climate leaks into the next End load)");
         assertNotEquals(preFailure, postFailure,
                 "EndClimateAccess.get() must change after a degraded bootstrap (rollback occurred)");
+        assertNull(EndBiomeLayoutAccess.get(),
+                "EndBiomeLayoutAccess must be rolled back to null when bootstrap degrades");
     }
 
     // ------------------------------------------------------------------

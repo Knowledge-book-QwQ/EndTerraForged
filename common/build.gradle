@@ -2,13 +2,9 @@ architectury {
     common("fabric", "neoforge")
 }
 
-loom {
-    accessWidenerPath = file("src/main/resources/endterraforged.accesswidener")
-}
-
 dependencies {
     modImplementation "net.fabricmc:fabric-loader:${rootProject.fabric_loader_version}"
-	compileOnly "com.electronwill.night-config:toml:3.6.7"
+    compileOnly "com.electronwill.night-config:toml:3.6.7"
 
     testImplementation "org.junit.jupiter:junit-jupiter:5.10.2"
     testRuntimeOnly "org.junit.platform:junit-platform-launcher:1.10.2"
@@ -16,10 +12,6 @@ dependencies {
 
 test {
     useJUnitPlatform()
-}
-
-repositories {
-
 }
 
 remapJar {

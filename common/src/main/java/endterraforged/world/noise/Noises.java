@@ -13,12 +13,12 @@
  * Noises.map identity short-circuit are all preserved so makeMountains recipes
  * assemble identically to upstream.
  *
- * Only the subset needed for the End-heightmap mountain layer is ported:
- * constant/zero/one, perlin/perlinRidge/simplex/simplex2, worley/worleyEdge,
- * shiftSeed, add/mul/pow/alpha/invert, map/clamp, warp/warpPerlin. Upstream's
- * perlin2/billow/cubic/sin/white/line/frequency/gradient/terrace/
+ * Only the subset needed by the current End terrain runtime is ported:
+ * constant/zero/one, perlin/perlin2/perlinRidge/billow/cubic/simplex/simplex2,
+ * worley/worleyEdge, shiftSeed, add/mul/pow/alpha/invert, map/clamp/terrace,
+ * warp/warpPerlin. Upstream's sin/white/line/frequency/gradient/
  * advancedTerrace/blend/boost/steps/abs/threshold/min/max/cache/erosion/cell
- * factories are deferred until a consumer needs them.
+ * factories remain deferred until a consumer needs them.
  */
 package endterraforged.world.noise;
 
@@ -77,6 +77,18 @@ public final class Noises {
         return new Perlin(seed, 1.0F / scale, octaves, lacunarity, gain, Interpolation.CURVE3);
     }
 
+    public static Noise perlin2(int seed, int scale, int octaves) {
+        return perlin2(seed, scale, octaves, 2.0F);
+    }
+
+    public static Noise perlin2(int seed, int scale, int octaves, float lacunarity) {
+        return perlin2(seed, scale, octaves, lacunarity, 0.5F);
+    }
+
+    public static Noise perlin2(int seed, int scale, int octaves, float lacunarity, float gain) {
+        return new Perlin2(seed, 1.0F / scale, octaves, lacunarity, gain, Interpolation.CURVE3);
+    }
+
     public static Noise perlinRidge(int seed, int scale, int octaves) {
         return perlinRidge(seed, scale, octaves, 2.0F);
     }
@@ -87,6 +99,26 @@ public final class Noises {
 
     public static Noise perlinRidge(int seed, int scale, int octaves, float lacunarity, float gain) {
         return shiftSeed(new PerlinRidge(1.0F / scale, octaves, lacunarity, gain, Interpolation.CURVE3), seed);
+    }
+
+    public static Noise billow(int seed, int scale, int octaves) {
+        return billow(seed, scale, octaves, 2.0F);
+    }
+
+    public static Noise billow(int seed, int scale, int octaves, float lacunarity) {
+        return billow(seed, scale, octaves, lacunarity, 0.5F);
+    }
+
+    public static Noise billow(int seed, int scale, int octaves, float lacunarity, float gain) {
+        return shiftSeed(new Billow(1.0F / scale, octaves, lacunarity, gain, Interpolation.CURVE3), seed);
+    }
+
+    public static Noise cubic(int seed, int scale, int octaves) {
+        return cubic(seed, scale, octaves, 2.0F, 0.5F);
+    }
+
+    public static Noise cubic(int seed, int scale, int octaves, float lacunarity, float gain) {
+        return shiftSeed(new Cubic(1.0F / scale, octaves, lacunarity, gain), seed);
     }
 
     public static Noise simplex(int seed, int scale, int octaves) {
@@ -197,6 +229,11 @@ public final class Noises {
 
     public static Noise clamp(Noise input, Noise min, Noise max) {
         return new Clamp(input, min, max);
+    }
+
+    public static Noise terrace(Noise input, float ramp, float cliff,
+                                float rampHeight, float blendRange, int steps) {
+        return new Terrace(input, constant(ramp), constant(cliff), constant(rampHeight), blendRange, steps);
     }
 
     // ----- domain warping --------------------------------------------------

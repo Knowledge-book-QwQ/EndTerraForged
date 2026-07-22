@@ -19,7 +19,17 @@ import endterraforged.world.climate.ClimateModulator;
 import endterraforged.world.climate.ClimatePredicate;
 import endterraforged.world.climate.EndClimate;
 import endterraforged.world.climate.EndClimateAccess;
+import endterraforged.world.config.ContinentConfig;
+import endterraforged.world.config.EndPreset;
+import endterraforged.world.config.SeaMode;
 import endterraforged.world.config.TestProfile;
+import endterraforged.world.config.TopologyMode;
+import endterraforged.world.continent.Continent;
+import endterraforged.world.continent.ContinentSignalBuffer;
+import endterraforged.world.continent.RtfAdvancedContinent;
+import endterraforged.world.continent.RtfMultiContinent;
+import endterraforged.world.floatingislands.FloatingIslandsField;
+import endterraforged.world.heightmap.EndDensity;
 import endterraforged.world.heightmap.EndHeightmap;
 import endterraforged.world.lake.EndLakeMap;
 import endterraforged.world.level.biome.BiomeSlot;
@@ -58,12 +68,12 @@ import endterraforged.world.river.EndRiverMap;
  * code ran and produced a non-trivial result. A regression will be visible
  * in the printed numbers and in subsequent code review.</p>
  *
- * <p><b>Coverage.</b> Eight benchmarks cover the three hot paths of
+ * <p><b>Coverage.</b> Ten benchmarks cover the three hot paths of
  * {@link EndBiomeSelector} (fast-path 1 / 2 / slow), the raw and full-chain
- * height queries of {@link EndHeightmap}, and the published-climate vs
- * null-climate paths of {@link ClimatePredicate}. Together these are the
- * per-cell/per-column operations the chunk generator issues 65k times per
- * chunk — the make-or-break paths for stage 5.3 perf budgeting.</p>
+ * height queries of {@link EndHeightmap}, the final End density plus floating
+ * island overlay, and the published-climate vs null-climate paths of
+ * {@link ClimatePredicate}. Together these are the per-cell/per-column
+ * operations the chunk generator issues during terrain generation.</p>
  */
 class PerformanceBenchmarkTest {
 
@@ -258,6 +268,130 @@ class PerformanceBenchmarkTest {
         assertTrue(checksum != 0, "DCE guard: checksum must be non-zero");
         System.out.printf("[perf] endHeightmapGetHeightFullChain: %.1f ns/op%n",
                 elapsed / (double) MEASURE);
+    }
+
+    /**
+     * Final-density path for a continuous mainland with a solid floor and
+     * the optional floating-island overlay enabled. This matches the shape
+     * semantics of the legacy preset seen in the real-client baseline, while
+     * keeping the current Standard 512-block world envelope.
+     */
+    @Test
+    void endDensityWithFloatingIslandOverlay() {
+        EndHeightmap heightmap = new EndHeightmap(
+                new TestProfile(512, -256, 0, 0,
+                        SeaMode.WITH_FLOOR, TopologyMode.CONTINENTAL, true), SEED)
+                .withClimate(ClimateModulator.defaults(EndClimate.defaults(SEED)))
+                .withRivers(EndRiverMap.defaults())
+                .withLakes(EndLakeMap.defaults());
+        EndDensity density = new EndDensity(heightmap);
+        FloatingIslandsField floatingIslands = FloatingIslandsField.defaults();
+
+        long checksum = 0;
+        for (int warm = 0; warm < WARMUP; warm++) {
+            checksum += densityAndOverlayBits(density, floatingIslands, warm);
+        }
+        long start = System.nanoTime();
+        for (int i = 0; i < MEASURE; i++) {
+            checksum += densityAndOverlayBits(density, floatingIslands, i);
+        }
+        long elapsed = System.nanoTime() - start;
+        assertTrue(checksum != 0, "DCE guard: checksum must be non-zero");
+        System.out.printf("[perf] endDensityWithFloatingIslandOverlay: %.1f ns/op%n",
+                elapsed / (double) MEASURE);
+    }
+
+    /**
+     * Default Standard shelf density outside the protected central region.
+     *
+     * <p>The Y sequence includes the guaranteed lower void band, shelf body,
+     * and upper air. It tracks the cost of the current production volume model
+     * without presenting this JUnit micro-benchmark as a client or JFR result.</p>
+     */
+    @Test
+    void endDensityDefaultOuterShelf() {
+        EndHeightmap heightmap = new EndHeightmap(EndPreset.defaults(), SEED)
+                .withClimate(ClimateModulator.defaults(EndClimate.defaults(SEED)))
+                .withRivers(EndRiverMap.defaults())
+                .withLakes(EndLakeMap.defaults());
+        EndDensity density = new EndDensity(heightmap);
+
+        long checksum = 0;
+        for (int warm = 0; warm < WARMUP; warm++) {
+            checksum += outerShelfDensityBits(density, warm);
+        }
+        long start = System.nanoTime();
+        for (int i = 0; i < MEASURE; i++) {
+            checksum += outerShelfDensityBits(density, i);
+        }
+        long elapsed = System.nanoTime() - start;
+        assertTrue(checksum != 0, "DCE guard: checksum must be non-zero");
+        System.out.printf("[perf] endDensityDefaultOuterShelf: %.1f ns/op%n",
+                elapsed / (double) MEASURE);
+    }
+
+    /**
+     * Relative cost of the two RTF-compatible macro-continent samplers.
+     *
+     * <p>This is an early warning only. It samples the complete caller-owned
+     * signal path, including stable identity metadata, but does not represent
+     * NoiseChunk interpolation, client rendering or Standard chunk p95.</p>
+     */
+    @Test
+    void rtfContinentAlgorithmCostComparison() {
+        ContinentConfig config = ContinentConfig.rtfMultiDefaults();
+        RtfMultiContinent multi = new RtfMultiContinent(SEED, config);
+        RtfAdvancedContinent advanced = new RtfAdvancedContinent(SEED, config);
+
+        benchmarkContinent(multi, WARMUP);
+        benchmarkContinent(advanced, WARMUP);
+        long multiStart = System.nanoTime();
+        long multiChecksum = benchmarkContinent(multi, MEASURE);
+        long multiElapsed = System.nanoTime() - multiStart;
+        long advancedStart = System.nanoTime();
+        long advancedChecksum = benchmarkContinent(advanced, MEASURE);
+        long advancedElapsed = System.nanoTime() - advancedStart;
+
+        assertTrue(multiChecksum != 0L, "DCE guard: RTF_MULTI checksum must be non-zero");
+        assertTrue(advancedChecksum != 0L, "DCE guard: RTF_ADVANCED checksum must be non-zero");
+        double multiNs = multiElapsed / (double) MEASURE;
+        double advancedNs = advancedElapsed / (double) MEASURE;
+        System.out.printf(
+                "[perf] continent RTF_MULTI %.1f ns/op, RTF_ADVANCED %.1f ns/op, ratio %.2fx%n",
+                multiNs,
+                advancedNs,
+                advancedNs / multiNs);
+    }
+
+    private static long benchmarkContinent(Continent continent, int iterations) {
+        ContinentSignalBuffer signals = new ContinentSignalBuffer();
+        long checksum = 0L;
+        for (int i = 0; i < iterations; i++) {
+            float x = 4096.0F + (i & 255) * 73.0F;
+            float z = -8192.0F + ((i >>> 8) & 255) * 91.0F;
+            continent.sampleSignals(x, z, SEED, signals);
+            checksum += Float.floatToIntBits(signals.edge());
+            checksum += Float.floatToIntBits(signals.landness());
+            checksum += signals.continentId();
+        }
+        return checksum;
+    }
+
+    private static int densityAndOverlayBits(
+            EndDensity density, FloatingIslandsField floatingIslands, int sample) {
+        float x = sample * 7.3F;
+        float z = sample * 11.1F;
+        int y = -256 + (sample & 511);
+        float terrain = density.density(x, y, z, SEED);
+        float overlay = floatingIslands.solidity(x, y, z, SEED);
+        return Float.floatToIntBits(Math.max(terrain, overlay));
+    }
+
+    private static int outerShelfDensityBits(EndDensity density, int sample) {
+        float x = 6400.0F + (sample & 63) * 128.0F;
+        float z = 6400.0F + ((sample >>> 6) & 63) * 128.0F;
+        int y = -256 + (sample & 511);
+        return Float.floatToIntBits(density.density(x, y, z, SEED));
     }
 
     // ----- ClimatePredicate benchmarks ----------------------------------

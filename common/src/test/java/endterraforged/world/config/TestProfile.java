@@ -14,9 +14,17 @@ public final class TestProfile implements DimensionProfile {
     private final SeaMode seaMode;
     private final TopologyMode topologyMode;
     private final boolean floatingIslandsEnabled;
+    private final TerrainConfig terrainConfig;
 
     public TestProfile(int worldHeight, int minY, int seaLevelY, int islandBaselineY,
                        SeaMode seaMode, TopologyMode topologyMode, boolean floatingIslandsEnabled) {
+        this(worldHeight, minY, seaLevelY, islandBaselineY, seaMode, topologyMode,
+                floatingIslandsEnabled, TerrainConfig.DEFAULT);
+    }
+
+    public TestProfile(int worldHeight, int minY, int seaLevelY, int islandBaselineY,
+                       SeaMode seaMode, TopologyMode topologyMode, boolean floatingIslandsEnabled,
+                       TerrainConfig terrainConfig) {
         this.worldHeight = worldHeight;
         this.minY = minY;
         this.seaLevelY = seaLevelY;
@@ -24,11 +32,12 @@ public final class TestProfile implements DimensionProfile {
         this.seaMode = seaMode;
         this.topologyMode = topologyMode;
         this.floatingIslandsEnabled = floatingIslandsEnabled;
+        this.terrainConfig = terrainConfig;
     }
 
-    /** Convenience: a no-sea, no-floating-islands End of the default RTF height range. */
+    /** Convenience: a no-sea, no-floating-islands End of the standard player envelope. */
     public static TestProfile defaultEnd() {
-        return new TestProfile(4064, -2032, 0, 0, SeaMode.NONE, TopologyMode.ISLANDS, false);
+        return new TestProfile(512, -256, 0, 0, SeaMode.NONE, TopologyMode.ISLANDS, false);
     }
 
     @Override
@@ -64,5 +73,10 @@ public final class TestProfile implements DimensionProfile {
     @Override
     public boolean floatingIslandsEnabled() {
         return floatingIslandsEnabled;
+    }
+
+    @Override
+    public TerrainConfig terrainConfig() {
+        return terrainConfig;
     }
 }

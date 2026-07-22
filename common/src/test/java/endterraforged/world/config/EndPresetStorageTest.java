@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Optional;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -31,8 +32,8 @@ import endterraforged.world.filter.ErosionConfig;
  * <ul>
  *   <li><b>Load.</b> Missing file → empty; valid file → preset; corrupt
  *       JSON → empty; valid JSON but wrong shape → empty; partial JSON
- *       → preset with codec-defaults for missing fields; empty JSON
- *       object → {@link EndPreset#defaults()}; IO error → empty.</li>
+ *       → preset with codec-defaults for missing fields; versionless empty
+ *       JSON object → {@link EndPreset#legacyDefaults()}; IO error → empty.</li>
  *   <li><b>Save.</b> Writes file at the expected path; round-trips
  *       through {@link EndPresetStorage#load} losslessly; overwrites an
  *       existing file; produces pretty-printed JSON (git-friendly);
@@ -200,16 +201,15 @@ class EndPresetStorageTest {
     }
 
     @Test
-    void loadReturnsDefaultsForEmptyJsonObject() throws IOException {
-        // EndPreset.CODEC's optionalFieldOf means {} decodes to
-        // EndPreset.defaults() — a hand-edited preset file with the
-        // object stripped to {} must therefore yield defaults.
+    void loadReturnsLegacyDefaultsForEmptyJsonObject() throws IOException {
+        // A pre-format-version compact file has no way to declare that it
+        // wants current defaults. Preserve its historical topology instead.
         writePresetFile("{}");
         Optional<EndPreset> loaded = EndPresetStorage.load(worldDir);
         assertTrue(loaded.isPresent(),
                 "an empty JSON object must decode (all fields fall back to defaults)");
-        assertEquals(EndPreset.defaults(), loaded.get(),
-                "{} must decode to EndPreset.defaults()");
+        assertEquals(EndPreset.legacyDefaults(), loaded.get(),
+                "{} must decode to EndPreset.legacyDefaults()");
     }
 
     @Test
@@ -264,9 +264,8 @@ class EndPresetStorageTest {
 
     @Test
     void saveRoundTripsDefaultsPresetLosslessly() {
-        // Even though defaults() encodes compactly to {}, loading the
-        // empty object must yield defaults() back — pinning the
-        // compact-encoding round-trip.
+        // Current defaults persist their format and topology explicitly, so
+        // save(defaults()) must not collapse into a versionless legacy file.
         assertTrue(EndPresetStorage.save(worldDir, EndPreset.defaults()));
         Optional<EndPreset> loaded = EndPresetStorage.load(worldDir);
         assertTrue(loaded.isPresent());
@@ -358,6 +357,131 @@ class EndPresetStorageTest {
     }
 
     // ------------------------------------------------------------------
+    //  import/export and named preset library
+    // ------------------------------------------------------------------
+
+    @Test
+    void exportToCreatesParentDirectoryAndImportFromRoundTrips() {
+        Path exported = worldDir.resolve("exports").resolve("shared.json");
+        EndPreset custom = fullyCustomPreset();
+        assertTrue(EndPresetStorage.exportTo(exported, custom),
+                "exportTo() must create parent directories and write the preset");
+        Optional<EndPreset> loaded = EndPresetStorage.importFrom(exported);
+        assertTrue(loaded.isPresent(),
+                "importFrom() must decode a file written by exportTo()");
+        assertEquals(custom, loaded.get(),
+                "exportTo() -> importFrom() must preserve the preset");
+    }
+
+    @Test
+    void importFromReturnsEmptyForMissingFile() {
+        Optional<EndPreset> loaded = EndPresetStorage.importFrom(worldDir.resolve("missing.json"));
+        assertTrue(loaded.isEmpty(),
+                "importFrom() must treat a missing file as no importable preset");
+    }
+
+    @Test
+    void loadNamedUsesErrorHandlerForCorruptLibraryFile() throws IOException {
+        Path file = EndPresetStorage.namedPresetFile(worldDir, "broken");
+        Files.createDirectories(file.getParent());
+        Files.writeString(file, "{\"world_height\": 100}");
+        ErrorSink sink = new ErrorSink();
+        Optional<EndPreset> loaded = EndPresetStorage.loadNamed(worldDir, "broken", sink::accept);
+        assertTrue(loaded.isEmpty(),
+                "loadNamed() must return empty for an invalid named preset");
+        assertEquals(1, sink.count(),
+                "loadNamed() must surface decode errors through the handler");
+        assertTrue(sink.first().contains("world_height"),
+                "named preset decode error must preserve field-specific diagnostics");
+    }
+
+    @Test
+    void saveNamedWritesSanitizedLibraryFileAndRoundTrips() {
+        EndPreset custom = fullyCustomPreset();
+        assertTrue(EndPresetStorage.saveNamed(worldDir, " My Preset.json ", custom));
+        Path expected = EndPresetStorage.presetLibraryDir(worldDir).resolve("my_preset.json");
+        assertTrue(Files.isRegularFile(expected),
+                "saveNamed() must write the sanitized JSON file in the library dir");
+        Optional<EndPreset> loaded = EndPresetStorage.loadNamed(worldDir, "my_preset");
+        assertTrue(loaded.isPresent());
+        assertEquals(custom, loaded.get(),
+                "saveNamed() -> loadNamed() must preserve the preset");
+        assertFalse(Files.exists(EndPresetStorage.presetFile(worldDir)),
+                "saving a named library preset must not replace the active world preset");
+    }
+
+    @Test
+    void deleteNamedRemovesOnlyTheNamedLibraryFile() {
+        assertTrue(EndPresetStorage.saveNamed(worldDir, "first", EndPreset.defaults()));
+        assertTrue(EndPresetStorage.saveNamed(worldDir, "second", fullyCustomPreset()));
+        assertTrue(EndPresetStorage.deleteNamed(worldDir, "first"),
+                "deleteNamed() must report true when it removed a library file");
+        assertTrue(EndPresetStorage.loadNamed(worldDir, "first").isEmpty(),
+                "deleted named preset must no longer load");
+        assertTrue(EndPresetStorage.loadNamed(worldDir, "second").isPresent(),
+                "deleteNamed() must not remove other named presets");
+    }
+
+    @Test
+    void listNamedReturnsSortedJsonStemsOnly() throws IOException {
+        Path directory = EndPresetStorage.presetLibraryDir(worldDir);
+        Files.createDirectories(directory);
+        Files.writeString(directory.resolve("zeta.json"), "{}");
+        Files.writeString(directory.resolve("alpha.json"), "{}");
+        Files.writeString(directory.resolve("notes.txt"), "{}");
+        Files.createDirectory(directory.resolve("folder.json"));
+        assertEquals(List.of("alpha", "zeta"), EndPresetStorage.listNamed(worldDir),
+                "listNamed() must return sorted JSON file stems and ignore non-files");
+    }
+
+    @Test
+    void listNamedReturnsEmptyWhenLibraryDirectoryIsMissing() {
+        assertEquals(List.of(), EndPresetStorage.listNamed(worldDir),
+                "listNamed() must be empty for worlds with no preset library yet");
+    }
+
+    @Test
+    void sanitizePresetNameStripsExtensionAndUnsafeCharacters() {
+        assertEquals("my_preset", EndPresetStorage.sanitizePresetName(" My:Preset.json "));
+        assertEquals("a_b", EndPresetStorage.sanitizePresetName("a/../b"));
+        assertEquals("preset", EndPresetStorage.sanitizePresetName("///"));
+        assertEquals("con_preset", EndPresetStorage.sanitizePresetName("CON"));
+        assertEquals("lpt1_preset", EndPresetStorage.sanitizePresetName("lpt1.json"));
+    }
+
+    @Test
+    void normalizePresetNameRejectsNamesWithoutSafeCharacters() {
+        assertEquals(Optional.of("my_preset"),
+                EndPresetStorage.normalizePresetName(" My:Preset.json "));
+        assertEquals(Optional.of("con_preset"),
+                EndPresetStorage.normalizePresetName("CON"));
+        assertEquals(Optional.empty(),
+                EndPresetStorage.normalizePresetName("///"));
+        assertEquals(Optional.empty(),
+                EndPresetStorage.normalizePresetName("   "));
+        assertEquals(Optional.empty(),
+                EndPresetStorage.normalizePresetName("__..json"));
+    }
+
+    @Test
+    void namedPresetFileResolvesInsidePresetLibrary() {
+        Path resolved = EndPresetStorage.namedPresetFile(worldDir, "../Unsafe Name.json");
+        assertEquals(EndPresetStorage.presetLibraryDir(worldDir).resolve("unsafe_name.json"), resolved,
+                "namedPresetFile() must sanitize names before resolving paths");
+        assertTrue(resolved.startsWith(EndPresetStorage.presetLibraryDir(worldDir)),
+                "named preset files must stay inside the preset library directory");
+    }
+
+    @Test
+    void exchangePresetFileResolvesInsideExchangeDirectory() {
+        Path resolved = EndPresetStorage.exchangePresetFile(worldDir, "../Unsafe Name.json");
+        assertEquals(EndPresetStorage.presetExchangeDir(worldDir).resolve("unsafe_name.json"), resolved,
+                "exchangePresetFile() must sanitize names before resolving paths");
+        assertTrue(resolved.startsWith(EndPresetStorage.presetExchangeDir(worldDir)),
+                "exchange preset files must stay inside the exchange directory");
+    }
+
+    // ------------------------------------------------------------------
     //  Null-args fail-fast (NPE, not silent return)
     // ------------------------------------------------------------------
 
@@ -392,6 +516,60 @@ class EndPresetStorageTest {
     void presetFileWithNullPathThrowsNpe() {
         assertThrows(NullPointerException.class,
                 () -> EndPresetStorage.presetFile(null));
+    }
+
+    @Test
+    void importFromWithNullPathThrowsNpe() {
+        assertThrows(NullPointerException.class,
+                () -> EndPresetStorage.importFrom(null));
+    }
+
+    @Test
+    void importFromWithNullHandlerThrowsNpe() {
+        assertThrows(NullPointerException.class,
+                () -> EndPresetStorage.importFrom(worldDir.resolve("preset.json"), null));
+    }
+
+    @Test
+    void exportToWithNullPathThrowsNpe() {
+        assertThrows(NullPointerException.class,
+                () -> EndPresetStorage.exportTo(null, EndPreset.defaults()));
+    }
+
+    @Test
+    void exportToWithNullPresetThrowsNpe() {
+        assertThrows(NullPointerException.class,
+                () -> EndPresetStorage.exportTo(worldDir.resolve("preset.json"), null));
+    }
+
+    @Test
+    void saveNamedWithNullNameThrowsNpe() {
+        assertThrows(NullPointerException.class,
+                () -> EndPresetStorage.saveNamed(worldDir, null, EndPreset.defaults()));
+    }
+
+    @Test
+    void loadNamedWithNullNameThrowsNpe() {
+        assertThrows(NullPointerException.class,
+                () -> EndPresetStorage.loadNamed(worldDir, null));
+    }
+
+    @Test
+    void listNamedWithNullPathThrowsNpe() {
+        assertThrows(NullPointerException.class,
+                () -> EndPresetStorage.listNamed(null));
+    }
+
+    @Test
+    void sanitizePresetNameWithNullNameThrowsNpe() {
+        assertThrows(NullPointerException.class,
+                () -> EndPresetStorage.sanitizePresetName(null));
+    }
+
+    @Test
+    void normalizePresetNameWithNullNameThrowsNpe() {
+        assertThrows(NullPointerException.class,
+                () -> EndPresetStorage.normalizePresetName(null));
     }
 
     // ------------------------------------------------------------------
@@ -600,6 +778,9 @@ class EndPresetStorageTest {
     private static EndPreset fullyCustomPreset() {
         return new EndPreset(384, -64, 63, 100,
                 SeaMode.WITH_FLOOR, TopologyMode.CONTINENTAL_SHATTERED, true,
+                ContinentConfig.defaults(),
+                new TerrainConfig(0.75F, 2.5F),
+                new ClimateConfig(6000.0F, 900, 1200, 1500, 0.4F),
                 new ErosionConfig(200, 40, 1.5F, 1.2F, 0.7F, 0.3F));
     }
 }

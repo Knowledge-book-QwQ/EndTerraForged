@@ -34,6 +34,38 @@ class NoiseModuleTest {
     }
 
     @Test
+    void perlin2InRangeAndUsesItsStoredSeed() {
+        Perlin2 perlin = new Perlin2(SEED, 1.0F / 200.0F, 4, 2.0F, 0.5F, Interpolation.CURVE4);
+        boolean differsFromPerlin = false;
+        Perlin standard = new Perlin(SEED, 1.0F / 200.0F, 4, 2.0F, 0.5F, Interpolation.CURVE4);
+        for (int i = 0; i < SAMPLES; i++) {
+            float value = perlin.compute(x(i), z(i), 1);
+            assertTrue(value >= perlin.minValue() - 1e-4F && value <= perlin.maxValue() + 1e-4F,
+                    "Perlin2 out of range: " + value);
+            assertEquals(Float.floatToIntBits(value),
+                    Float.floatToIntBits(perlin.compute(x(i), z(i), 2)),
+                    "Perlin2 should ignore the passed seed");
+            differsFromPerlin |= Float.floatToIntBits(value)
+                    != Float.floatToIntBits(standard.compute(x(i), z(i), 0));
+        }
+        assertTrue(differsFromPerlin, "Perlin2 must retain its distinct 24-gradient kernel");
+    }
+
+    @Test
+    void perlin2FactoryPreservesRequestedParametersAndMapAll() {
+        Noise noise = Noises.perlin2(SEED, 320, 5, 4.33F, 0.26F);
+        assertTrue(noise instanceof Perlin2);
+        Perlin2 perlin = (Perlin2) noise;
+        assertEquals(SEED, perlin.seed());
+        assertEquals(1.0F / 320.0F, perlin.frequency(), 0.0F);
+        assertEquals(5, perlin.octaves());
+        assertEquals(4.33F, perlin.lacunarity(), 0.0F);
+        assertEquals(0.26F, perlin.gain(), 0.0F);
+        assertEquals(Interpolation.CURVE3, perlin.interpolation());
+        assertEquals(perlin, perlin.mapAll(input -> input));
+    }
+
+    @Test
     void simplexInRange() {
         Simplex simplex = new Simplex(1.0F / 200.0F, 4, 2.0F, 0.5F, Interpolation.CURVE4);
         for (int i = 0; i < SAMPLES; i++) {
@@ -51,6 +83,45 @@ class NoiseModuleTest {
             float v = ridge.compute(x(i), z(i), SEED);
             assertTrue(v >= ridge.minValue() - 1e-4f && v <= ridge.maxValue() + 1e-4f,
                     "PerlinRidge out of range: " + v);
+        }
+    }
+
+    @Test
+    void billowInRangeAndDeterministic() {
+        Billow billow = new Billow(1.0F / 300.0F, 4, 2.0F, 0.5F, Interpolation.CURVE3);
+        for (int i = 0; i < SAMPLES; i++) {
+            float value = billow.compute(x(i), z(i), SEED);
+            assertTrue(value >= billow.minValue() - 1e-4F && value <= billow.maxValue() + 1e-4F,
+                    "Billow out of range: " + value);
+            assertEquals(value, billow.compute(x(i), z(i), SEED), 0.0F,
+                    "Billow must be deterministic");
+        }
+    }
+
+    @Test
+    void cubicInRangeAndSeedSensitive() {
+        Cubic cubic = new Cubic(1.0F / 128.0F, 3, 2.0F, 0.5F);
+        boolean anyDifference = false;
+        for (int i = 0; i < SAMPLES; i++) {
+            float first = cubic.compute(x(i), z(i), SEED);
+            assertTrue(first >= cubic.minValue() - 1e-4F && first <= cubic.maxValue() + 1e-4F,
+                    "Cubic out of range: " + first);
+            anyDifference |= Float.floatToIntBits(first)
+                    != Float.floatToIntBits(cubic.compute(x(i), z(i), SEED + 1));
+        }
+        assertTrue(anyDifference, "Cubic must respect the passed seed");
+    }
+
+    @Test
+    void terraceStaysFiniteAndWithinSourceRange() {
+        Noise terrace = Noises.terrace(
+                Noises.perlin(SEED, 500, 2),
+                0.9F, 0.15F, 0.35F, 0.4F, 4);
+        for (int i = 0; i < SAMPLES; i++) {
+            float value = terrace.compute(x(i), z(i), SEED);
+            assertTrue(Float.isFinite(value), "Terrace must stay finite");
+            assertTrue(value >= terrace.minValue() - 1e-4F && value <= terrace.maxValue() + 1e-4F,
+                    "Terrace out of source range: " + value);
         }
     }
 

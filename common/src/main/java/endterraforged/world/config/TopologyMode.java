@@ -20,6 +20,19 @@ package endterraforged.world.config;
  */
 public enum TopologyMode {
     /**
+     * A continuous, complete mainland with no void rift carving. Useful as a
+     * stable editing baseline before adding shattered rifts or island scatter.
+     */
+    CONTINENTAL,
+
+    /**
+     * Multiple macro continents outside the protected vanilla End centre.
+     * Each continent is separated by End void and follows the configured
+     * continent scale, size variance, skipping and domain warp.
+     */
+    OUTER_CONTINENTS,
+
+    /**
      * A continuous "continent" height-field, cut by void/rift noise into a
      * shattered supercontinent. Visually closest to a torn-up End mainland.
      * Backed by a {@code ContinentalShatteredContinent} module (stage 2.3).

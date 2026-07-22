@@ -46,8 +46,9 @@ import endterraforged.world.filter.ErosionConfigValidator;
  *   <li>{@code minY + worldHeight <= 2032} — vanilla {@code DimensionType}
  *       requires {@code min_y + height <= 2032} (the world's top must not
  *       exceed y=2032). Combined with the previous two constraints, this
- *       means a maximally-tall world is {@code minY=-2032, worldHeight=4064},
- *       which is the EndTerraForged default.</li>
+ *       means a maximally-tall world is {@code minY=-2032, worldHeight=4064}.
+ *       That remains a valid explicit high-cost specification; the bundled
+ *       EndTerraForged default is smaller.</li>
  *   <li>{@code seaLevelY} in {@code [minY, minY + worldHeight - 1]} — the
  *       sea level block Y must be inside the world's vertical bounds.
  *       Enforced unconditionally (not just when {@code seaMode != NONE})
@@ -116,8 +117,8 @@ public final class EndPresetValidator {
     /**
      * Alignment requirement for {@code worldHeight} and {@code minY}.
      * Vanilla {@code DimensionType} requires both to be multiples of 16
-     * (a chunk-section height). The EndTerraForged default
-     * ({@code worldHeight=4064, minY=-2032}) satisfies this.
+     * (a chunk-section height). Both the standard player envelope and any
+     * supported larger creation-time specification satisfy this.
      */
     private static final int ALIGNMENT = 16;
 
@@ -143,6 +144,21 @@ public final class EndPresetValidator {
      *         instance before validation runs)
      */
     public static DataResult<EndPreset> validate(EndPreset preset) {
+        if (preset.formatVersion() < EndPreset.LEGACY_FORMAT_VERSION
+                || preset.formatVersion() > EndPreset.CURRENT_FORMAT_VERSION) {
+            return DataResult.error(() -> "format_version must be in ["
+                    + EndPreset.LEGACY_FORMAT_VERSION + ", " + EndPreset.CURRENT_FORMAT_VERSION
+                    + "], got " + preset.formatVersion());
+        }
+        if (preset.formatVersion() >= 3 && !preset.continentConfig().continentBands().enabled()) {
+            return DataResult.error(() -> "format_version 3 presets must explicitly enable continent.bands; "
+                    + "pre-v3 presets use legacy continent band passthrough");
+        }
+        if (preset.formatVersion() <= 3
+                && preset.terrainConfig().terrainLayoutMode() != TerrainLayoutMode.LEGACY_SELECTOR) {
+            return DataResult.error(() -> "terrain.terrain_layout_mode=REGION_PLANNED requires the future "
+                    + "format_version 4 terrain catalog; v3 presets must retain LEGACY_SELECTOR");
+        }
         // worldHeight: positive multiple of 16, within [16, 4064].
         // Vanilla DimensionType throws IllegalArgumentException on any
         // violation, surfacing as a confusing worldgen crash; catch it
@@ -202,6 +218,36 @@ public final class EndPresetValidator {
                     "island_baseline_y must be in [" + preset.minY() + ", "
                             + (worldTop - 1) + "] (world vertical bounds), got "
                             + islandBaselineY);
+        }
+        DataResult<ContinentConfig> continentResult =
+                ContinentConfigValidator.validate(preset.continentConfig());
+        if (continentResult.error().isPresent()) {
+            String innerMsg = continentResult.error().get().message();
+            return DataResult.error(() -> "continent config invalid: " + innerMsg);
+        }
+        DataResult<TerrainConfig> terrainResult =
+                TerrainConfigValidator.validate(preset.terrainConfig());
+        if (terrainResult.error().isPresent()) {
+            String innerMsg = terrainResult.error().get().message();
+            return DataResult.error(() -> "terrain config invalid: " + innerMsg);
+        }
+        DataResult<ClimateConfig> climateResult =
+                ClimateConfigValidator.validate(preset.climateConfig());
+        if (climateResult.error().isPresent()) {
+            String innerMsg = climateResult.error().get().message();
+            return DataResult.error(() -> "climate config invalid: " + innerMsg);
+        }
+        DataResult<BiomeLayoutConfig> biomeLayoutResult =
+                BiomeLayoutConfigValidator.validate(preset.biomeLayoutConfig());
+        if (biomeLayoutResult.error().isPresent()) {
+            String innerMsg = biomeLayoutResult.error().get().message();
+            return DataResult.error(() -> "biome layout config invalid: " + innerMsg);
+        }
+        DataResult<SubsurfaceConfig> subsurfaceResult =
+                SubsurfaceConfigValidator.validate(preset.subsurfaceConfig());
+        if (subsurfaceResult.error().isPresent()) {
+            String innerMsg = subsurfaceResult.error().get().message();
+            return DataResult.error(() -> "subsurface config invalid: " + innerMsg);
         }
         // Delegate the embedded ErosionConfig to its own validator.
         // The sub-field checks (droplet counts, rates in [0, 1]) live in

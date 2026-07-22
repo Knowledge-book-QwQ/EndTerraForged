@@ -9,49 +9,55 @@
  */
 package endterraforged.world.continent;
 
+import endterraforged.world.config.ContinentCoastShape;
+import endterraforged.world.noise.Constant;
 import endterraforged.world.noise.DistanceFunction;
 import endterraforged.world.noise.Noise;
 import endterraforged.world.noise.NoiseMath;
 import endterraforged.world.noise.domain.Domain;
 
 /**
- * {@link endterraforged.world.config.TopologyMode#ISLANDS} continent: discrete floating islands separated
- * by void, closest in spirit to vanilla End outer islands but more dramatic.
+ * {@link endterraforged.world.config.TopologyMode#ISLANDS} continent: discrete
+ * floating islands separated by void.
  *
- * <p>One coherent 3x3 worley scan per sample finds the nearest feature point
- * <em>and</em> its owning cell, so the per-island existence gate and size
- * jitter — both derived from the winning cell's hash — stay perfectly in sync
- * with the falloff. Composing this from separate {@code Worley} modules would
- * give each its own scan and therefore a desynchronised gate (an island could
- * vanish mid-falloff); the single scan is what makes the shape coherent.</p>
+ * <p>A single 3x3 cell scan finds both the nearest feature point and its owning
+ * cell, so the per-island existence gate and size jitter stay in sync with the
+ * falloff. The scan follows R9.6's continent-cell approach while the exposed
+ * parameters mirror R9.3.6's continent tuning surface.</p>
  *
- * <p>Output landness is {@code [0,1]}: {@code 1} at an island's feature point,
- * falling smoothly to {@code 0} at the island radius, and exactly {@code 0}
- * in cells gated out by {@link #scatter}. The EndHeightmap multiplies the
- * mountain layer by this, so islands naturally taper to a rim.</p>
- *
- * <p><b>Faithfulness vs RTF.</b> The cell scan reuses {@link NoiseMath#cell}
- * and mirrors {@link endterraforged.world.noise.Worley}'s 3x3 neighbourhood,
- * so feature-point placement is byte-identical to upstream worley. The gate,
- * the per-island size jitter and the hermite falloff are EndTerraForged
- * originals — RTF has no equivalent decoupled island shape.</p>
- *
- * @param frequency    island-cell frequency ({@code 1/scale}); higher = smaller, denser cells
- * @param distance     in-cell feature-point spread in {@code (0,1]}; {@code 1.0} roams the whole cell
- * @param islandRadius falloff radius in cell units (squared-distance space is rooted first);
- *                     landness reaches 0 at this distance from the feature point
- * @param scatter      per-cell existence threshold in {@code [0,1]}; a cell hosts an island
- *                     only if its hash {@code >= scatter}. Higher = fewer islands. {@code 0} = every cell
- * @param warp         coordinate warp applied before the scan, to break the square cell grid;
- *                     pass {@link endterraforged.world.noise.domain.Domains#identity()} for no warp
+ * @param frequency        island-cell frequency ({@code 1/scale})
+ * @param distance         local feature-point spread in cell units
+ * @param distanceFunction distance metric used to rank feature points
+ * @param jitter           random offset amount around the cell centre
+ * @param skipping         extra per-cell skip probability
+ * @param sizeVariance     per-island radius variation in {@code [0,1]}
+ * @param islandRadius     falloff radius in cell units
+ * @param scatter          base per-cell existence threshold in {@code [0,1]}
+ * @param warp             coordinate warp applied before the scan
+ * @param coastShape       legacy radial or organic cell-boundary coastline
+ * @param coastNoise       normalized multi-octave coast field
+ * @param coastStrength    signed coast displacement in normalized distance space
+ * @param coastCellBlend   contribution of the cell-boundary coastline
  */
-public record IslandsContinent(float frequency, float distance, float islandRadius,
-                               float scatter, Domain warp) implements Continent {
+public record IslandsContinent(float frequency, float distance, DistanceFunction distanceFunction,
+                               float jitter, float skipping, float sizeVariance,
+                               float islandRadius, float scatter, Domain warp,
+                               ContinentCoastShape coastShape, Noise coastNoise,
+                               float coastStrength, float coastCellBlend) implements Continent {
+
+    /**
+     * Retains the historical radial island behavior for direct callers and old
+     * preset migration paths.
+     */
+    public IslandsContinent(float frequency, float distance, DistanceFunction distanceFunction,
+                            float jitter, float skipping, float sizeVariance,
+                            float islandRadius, float scatter, Domain warp) {
+        this(frequency, distance, distanceFunction, jitter, skipping, sizeVariance, islandRadius, scatter,
+                warp, ContinentCoastShape.RADIAL_LEGACY, new Constant(0.5F), 0.0F, 0.0F);
+    }
 
     @Override
     public float compute(float x, float z, int seed) {
-        // Domain-warp the sample point first so the cell grid is deformed and
-        // islands don't sit on a perfect lattice.
         float wx = this.warp.getX(x, z, seed) * this.frequency;
         float wz = this.warp.getZ(x, z, seed) * this.frequency;
 
@@ -60,39 +66,48 @@ public record IslandsContinent(float frequency, float distance, float islandRadi
         int cellX = xi;
         int cellY = yi;
         float nearest = Float.MAX_VALUE;
+        float secondNearest = Float.MAX_VALUE;
         for (int dy = -1; dy <= 1; dy++) {
             for (int dx = -1; dx <= 1; dx++) {
                 int cx = xi + dx;
                 int cy = yi + dy;
                 NoiseMath.Vec2f vec = NoiseMath.cell(seed, cx, cy);
-                float deltaX = cx + vec.x() * this.distance - wx;
-                float deltaY = cy + vec.y() * this.distance - wz;
-                float dist = DistanceFunction.EUCLIDEAN.apply(deltaX, deltaY);
+                float deltaX = cellFeature(cx, vec.x()) - wx;
+                float deltaY = cellFeature(cy, vec.y()) - wz;
+                float dist = this.distanceFunction.apply(deltaX, deltaY);
                 if (dist < nearest) {
+                    secondNearest = nearest;
                     nearest = dist;
                     cellX = cx;
                     cellY = cy;
+                } else if (dist < secondNearest) {
+                    secondNearest = dist;
                 }
             }
         }
 
-        // Per-cell existence gate: a cell hosts an island only if its hash
-        // clears `scatter`. This turns the uniform grid into a scatter.
         float gate = value01(seed, cellX, cellY);
-        if (gate < this.scatter) {
+        if (gate < Math.max(this.scatter, this.skipping)) {
             return 0.0F;
         }
 
-        // Per-island radius jitter so neighbouring islands vary in size.
-        float jitter = value01(seed + 0x9E3779B1, cellX, cellY);
-        float radius = this.islandRadius * (0.5F + jitter);
+        float radiusNoise = value01(seed + 0x9E3779B1, cellX, cellY);
+        float radiusScale = 1.0F + (radiusNoise - 0.5F) * 2.0F * this.sizeVariance;
+        float radius = this.islandRadius * Math.max(0.1F, radiusScale);
         if (radius <= 0.0F) {
             return 0.0F;
         }
 
-        // EUCLIDEAN returns squared distance — root it for a true radial falloff.
-        float t = NoiseMath.clamp((float) Math.sqrt(nearest) / radius, 0.0F, 1.0F);
-        // 1 at the feature point, 0 at the radius, smooth in between.
+        float radialDistance = distanceToRadiusSpace(nearest) / radius;
+        float t = radialDistance;
+        if (this.coastShape == ContinentCoastShape.ORGANIC) {
+            float nearestDistance = distanceToRadiusSpace(nearest);
+            float secondDistance = distanceToRadiusSpace(secondNearest);
+            float cellDistance = nearestDistance / Math.max(secondDistance, 1.0E-5F);
+            float coastOffset = (this.coastNoise.compute(x, z, seed) * 2.0F - 1.0F) * this.coastStrength;
+            t = NoiseMath.lerp(radialDistance, cellDistance, this.coastCellBlend) - coastOffset;
+        }
+        t = NoiseMath.clamp(t, 0.0F, 1.0F);
         return 1.0F - NoiseMath.interpHermite(t);
     }
 
@@ -108,11 +123,24 @@ public record IslandsContinent(float frequency, float distance, float islandRadi
 
     @Override
     public Noise mapAll(Visitor visitor) {
-        return visitor.apply(new IslandsContinent(this.frequency, this.distance, this.islandRadius,
-                this.scatter, this.warp.mapAll(visitor)));
+        return visitor.apply(new IslandsContinent(this.frequency, this.distance, this.distanceFunction,
+                this.jitter, this.skipping, this.sizeVariance, this.islandRadius,
+                this.scatter, this.warp.mapAll(visitor), this.coastShape,
+                this.coastNoise.mapAll(visitor), this.coastStrength, this.coastCellBlend));
     }
 
-    /** Maps {@link NoiseMath#valCoord2D} (native {@code [-1,1]}) to clamped {@code [0,1]}. */
+    private float cellFeature(int cell, float random) {
+        float centred = 0.5F + (random - 0.5F) * this.jitter;
+        return cell + 0.5F + (centred - 0.5F) * this.distance;
+    }
+
+    private float distanceToRadiusSpace(float distance) {
+        if (this.distanceFunction == DistanceFunction.EUCLIDEAN) {
+            return (float) Math.sqrt(distance);
+        }
+        return distance;
+    }
+
     private static float value01(int seed, int x, int y) {
         return NoiseMath.clamp((NoiseMath.valCoord2D(seed, x, y) + 1.0F) * 0.5F, 0.0F, 1.0F);
     }

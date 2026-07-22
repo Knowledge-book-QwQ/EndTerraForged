@@ -13,8 +13,10 @@ import org.junit.jupiter.api.Test;
 import endterraforged.world.noise.Noise;
 import endterraforged.world.noise.Noises;
 import endterraforged.world.noise.Perlin;
+import endterraforged.world.noise.DistanceFunction;
 import endterraforged.world.noise.domain.Domain;
 import endterraforged.world.noise.domain.Domains;
+import endterraforged.world.config.ContinentCoastShape;
 
 /**
  * Contract tests for the EndTerraForged continent layer: the {@link Continent}
@@ -42,6 +44,19 @@ class ContinentTest {
                 Noises.perlin(seed, 100, 3),
                 Noises.perlin(seed + 1, 100, 3),
                 Noises.constant(80.0F));
+    }
+
+    private static IslandsContinent islands(float frequency, float distance, float radius,
+                                            float scatter, Domain warp) {
+        return new IslandsContinent(frequency, distance, DistanceFunction.EUCLIDEAN,
+                1.0F, 0.0F, 0.5F, radius, scatter, warp);
+    }
+
+    private static ContinentalShatteredContinent shattered(float frequency, float distance,
+                                                           float threshold, float strength,
+                                                           Domain warp) {
+        return new ContinentalShatteredContinent(frequency, distance, DistanceFunction.EUCLIDEAN,
+                1.0F, 0.0F, 0.0F, threshold, strength, warp);
     }
 
     private static int countPerlinLeaves(Noise noise) {
@@ -97,9 +112,19 @@ class ContinentTest {
     // ----- IslandsContinent ------------------------------------------------
 
     @Test
+    void completeContinentIsSolidEverywhere() {
+        CompleteContinent continent = new CompleteContinent(1.0F);
+        for (int i = 0; i < SAMPLES; i++) {
+            assertEquals(1.0F, continent.compute(x(i), z(i), SEED), 0.0F);
+        }
+        assertEquals(0.0F, continent.minValue(), 0.0F);
+        assertEquals(1.0F, continent.maxValue(), 0.0F);
+        assertSame(continent, continent.mapAll(n -> n));
+    }
+
+    @Test
     void islandsOutputStaysInUnitRange() {
-        IslandsContinent islands = new IslandsContinent(
-                1.0F / 300.0F, 1.0F, 0.6F, 0.5F, perlinWarp(SEED));
+        IslandsContinent islands = islands(1.0F / 300.0F, 1.0F, 0.6F, 0.5F, perlinWarp(SEED));
         for (int i = 0; i < SAMPLES; i++) {
             float v = islands.compute(x(i), z(i), SEED);
             assertTrue(v >= 0.0F - 1e-5F && v <= 1.0F + 1e-5F, "islands out of range: " + v);
@@ -110,8 +135,7 @@ class ContinentTest {
     void islandsScatterOneYieldsAlmostNoLand() {
         // scatter=1.0: a cell hosts an island only if its hash >= 1.0, which
         // essentially never happens, so the field should be ~all void.
-        IslandsContinent islands = new IslandsContinent(
-                1.0F / 200.0F, 1.0F, 0.6F, 1.0F, Domains.identity());
+        IslandsContinent islands = islands(1.0F / 200.0F, 1.0F, 0.6F, 1.0F, Domains.identity());
         int land = 0;
         for (int i = 0; i < SAMPLES; i++) {
             if (islands.compute(x(i), z(i), SEED) > 1e-4F) {
@@ -125,8 +149,7 @@ class ContinentTest {
     void islandsScatterZeroProducesIslandsWithVoidsBetween() {
         // scatter=0.0: every cell hosts an island, so centres reach high
         // landness and inter-cell boundaries fall back toward void.
-        IslandsContinent islands = new IslandsContinent(
-                1.0F / 120.0F, 1.0F, 0.6F, 0.0F, Domains.identity());
+        IslandsContinent islands = islands(1.0F / 120.0F, 1.0F, 0.6F, 0.0F, Domains.identity());
         float max = 0.0F;
         float min = 1.0F;
         for (int i = 0; i < SAMPLES; i++) {
@@ -139,9 +162,22 @@ class ContinentTest {
     }
 
     @Test
+    void skippedCellsDoNotLeakEarlierLandness() {
+        IslandsContinent allSkipped = new IslandsContinent(
+                1.0F / 120.0F, 1.0F, DistanceFunction.EUCLIDEAN,
+                1.0F, 1.0F, 0.5F, 0.6F, 0.0F, Domains.identity());
+        IslandsContinent active = islands(1.0F / 120.0F, 1.0F, 0.6F, 0.0F, Domains.identity());
+
+        for (int i = 0; i < SAMPLES; i++) {
+            active.compute(x(i), z(i), SEED);
+            assertEquals(0.0F, allSkipped.compute(x(i), z(i), SEED), 0.0F,
+                    "a skipped cell must not retain a previous sample's landness");
+        }
+    }
+
+    @Test
     void islandsIsDeterministic() {
-        IslandsContinent islands = new IslandsContinent(
-                1.0F / 250.0F, 1.0F, 0.6F, 0.5F, perlinWarp(SEED));
+        IslandsContinent islands = islands(1.0F / 250.0F, 1.0F, 0.6F, 0.5F, perlinWarp(SEED));
         for (int i = 0; i < SAMPLES; i++) {
             assertEquals(islands.compute(x(i), z(i), SEED), islands.compute(x(i), z(i), SEED), 0.0F);
         }
@@ -149,8 +185,7 @@ class ContinentTest {
 
     @Test
     void islandsIsSeedSensitive() {
-        IslandsContinent islands = new IslandsContinent(
-                1.0F / 250.0F, 1.0F, 0.6F, 0.3F, perlinWarp(SEED));
+        IslandsContinent islands = islands(1.0F / 250.0F, 1.0F, 0.6F, 0.3F, perlinWarp(SEED));
         boolean anyDifference = false;
         for (int i = 0; i < SAMPLES; i++) {
             if (Float.floatToIntBits(islands.compute(x(i), z(i), 1))
@@ -164,10 +199,8 @@ class ContinentTest {
 
     @Test
     void islandsWarpChangesOutputVsIdentity() {
-        IslandsContinent plain = new IslandsContinent(
-                1.0F / 250.0F, 1.0F, 0.6F, 0.4F, Domains.identity());
-        IslandsContinent warped = new IslandsContinent(
-                1.0F / 250.0F, 1.0F, 0.6F, 0.4F, perlinWarp(SEED));
+        IslandsContinent plain = islands(1.0F / 250.0F, 1.0F, 0.6F, 0.4F, Domains.identity());
+        IslandsContinent warped = islands(1.0F / 250.0F, 1.0F, 0.6F, 0.4F, perlinWarp(SEED));
         boolean anyDifference = false;
         for (int i = 0; i < SAMPLES; i++) {
             if (Float.floatToIntBits(plain.compute(x(i), z(i), SEED))
@@ -181,18 +214,64 @@ class ContinentTest {
 
     @Test
     void islandsMapAllReachesWarpDrivers() {
-        IslandsContinent islands = new IslandsContinent(
-                1.0F / 250.0F, 1.0F, 0.6F, 0.4F, perlinWarp(SEED));
+        IslandsContinent islands = islands(1.0F / 250.0F, 1.0F, 0.6F, 0.4F, perlinWarp(SEED));
         // perlinWarp wires two perlin drivers; mapAll must reach both.
         assertTrue(countPerlinLeaves(islands) >= 2, "mapAll should reach the warp's perlin drivers");
+    }
+
+    @Test
+    void organicCoastChangesTheRadialIslandContour() {
+        IslandsContinent radial = islands(1.0F / 400.0F, 1.0F, 0.68F, 0.0F, Domains.identity());
+        IslandsContinent organic = new IslandsContinent(
+                1.0F / 400.0F, 1.0F, DistanceFunction.EUCLIDEAN,
+                1.0F, 0.0F, 0.5F, 0.68F, 0.0F, Domains.identity(),
+                ContinentCoastShape.ORGANIC, Noises.perlin(913, 160, 5, 2.4F, 0.5F),
+                0.30F, 0.70F);
+
+        boolean foundDifference = false;
+        for (int i = 0; i < SAMPLES; i++) {
+            float radialValue = radial.compute(x(i), z(i), SEED);
+            float organicValue = organic.compute(x(i), z(i), SEED);
+            if (Float.floatToIntBits(radialValue) != Float.floatToIntBits(organicValue)) {
+                foundDifference = true;
+                break;
+            }
+        }
+        assertTrue(foundDifference, "organic coast must visibly differ from the radial contour");
+    }
+
+    @Test
+    void radialLegacyIgnoresCoastNoiseAndControls() {
+        IslandsContinent legacy = islands(1.0F / 400.0F, 1.0F, 0.68F, 0.0F, Domains.identity());
+        IslandsContinent explicitLegacy = new IslandsContinent(
+                1.0F / 400.0F, 1.0F, DistanceFunction.EUCLIDEAN,
+                1.0F, 0.0F, 0.5F, 0.68F, 0.0F, Domains.identity(),
+                ContinentCoastShape.RADIAL_LEGACY, Noises.perlin(913, 160, 5, 2.4F, 0.5F),
+                0.45F, 1.0F);
+
+        for (int i = 0; i < SAMPLES; i++) {
+            assertEquals(legacy.compute(x(i), z(i), SEED),
+                    explicitLegacy.compute(x(i), z(i), SEED), 0.0F);
+        }
+    }
+
+    @Test
+    void islandsMapAllReachesOrganicCoastNoise() {
+        IslandsContinent organic = new IslandsContinent(
+                1.0F / 400.0F, 1.0F, DistanceFunction.EUCLIDEAN,
+                1.0F, 0.0F, 0.5F, 0.68F, 0.0F, perlinWarp(SEED),
+                ContinentCoastShape.ORGANIC, Noises.perlin(913, 160, 5, 2.4F, 0.5F),
+                0.30F, 0.70F);
+
+        assertTrue(countPerlinLeaves(organic) >= 3,
+                "mapAll should reach both warp drivers and the organic coast noise");
     }
 
     // ----- ContinentalShatteredContinent -----------------------------------
 
     @Test
     void shatteredOutputStaysInUnitRange() {
-        ContinentalShatteredContinent continent = new ContinentalShatteredContinent(
-                1.0F / 600.0F, 1.0F, 0.6F, 1.0F, perlinWarp(SEED));
+        ContinentalShatteredContinent continent = shattered(1.0F / 600.0F, 1.0F, 0.6F, 1.0F, perlinWarp(SEED));
         for (int i = 0; i < SAMPLES; i++) {
             float v = continent.compute(x(i), z(i), SEED);
             assertTrue(v >= 0.0F - 1e-5F && v <= 1.0F + 1e-5F, "shattered out of range: " + v);
@@ -202,10 +281,8 @@ class ContinentTest {
     @Test
     void shatteredNoCarveReturnsSolidContinent() {
         // riftStrength=0 and riftThreshold=1 both short-circuit to solid land.
-        ContinentalShatteredContinent noStrength = new ContinentalShatteredContinent(
-                1.0F / 600.0F, 1.0F, 0.6F, 0.0F, perlinWarp(SEED));
-        ContinentalShatteredContinent fullThreshold = new ContinentalShatteredContinent(
-                1.0F / 600.0F, 1.0F, 1.0F, 1.0F, perlinWarp(SEED));
+        ContinentalShatteredContinent noStrength = shattered(1.0F / 600.0F, 1.0F, 0.6F, 0.0F, perlinWarp(SEED));
+        ContinentalShatteredContinent fullThreshold = shattered(1.0F / 600.0F, 1.0F, 1.0F, 1.0F, perlinWarp(SEED));
         for (int i = 0; i < SAMPLES; i++) {
             assertEquals(1.0F, noStrength.compute(x(i), z(i), SEED), 0.0F);
             assertEquals(1.0F, fullThreshold.compute(x(i), z(i), SEED), 0.0F);
@@ -216,8 +293,7 @@ class ContinentTest {
     void shatteredCarvesRiftsButKeepsSolidCentres() {
         // Defaults: solid centres (landness==1) must survive while rifts carve
         // toward 0 somewhere — otherwise the topology is degenerate.
-        ContinentalShatteredContinent continent = new ContinentalShatteredContinent(
-                1.0F / 400.0F, 1.0F, 0.55F, 1.0F, perlinWarp(SEED));
+        ContinentalShatteredContinent continent = shattered(1.0F / 400.0F, 1.0F, 0.55F, 1.0F, perlinWarp(SEED));
         float max = 0.0F;
         float min = 1.0F;
         for (int i = 0; i < SAMPLES; i++) {
@@ -231,8 +307,7 @@ class ContinentTest {
 
     @Test
     void shatteredIsDeterministic() {
-        ContinentalShatteredContinent continent = new ContinentalShatteredContinent(
-                1.0F / 500.0F, 1.0F, 0.6F, 1.0F, perlinWarp(SEED));
+        ContinentalShatteredContinent continent = shattered(1.0F / 500.0F, 1.0F, 0.6F, 1.0F, perlinWarp(SEED));
         for (int i = 0; i < SAMPLES; i++) {
             assertEquals(continent.compute(x(i), z(i), SEED),
                     continent.compute(x(i), z(i), SEED), 0.0F);
@@ -241,8 +316,7 @@ class ContinentTest {
 
     @Test
     void shatteredIsSeedSensitive() {
-        ContinentalShatteredContinent continent = new ContinentalShatteredContinent(
-                1.0F / 500.0F, 1.0F, 0.6F, 1.0F, perlinWarp(SEED));
+        ContinentalShatteredContinent continent = shattered(1.0F / 500.0F, 1.0F, 0.6F, 1.0F, perlinWarp(SEED));
         boolean anyDifference = false;
         for (int i = 0; i < SAMPLES; i++) {
             if (Float.floatToIntBits(continent.compute(x(i), z(i), 1))
@@ -256,10 +330,8 @@ class ContinentTest {
 
     @Test
     void shatteredWarpChangesOutputVsIdentity() {
-        ContinentalShatteredContinent plain = new ContinentalShatteredContinent(
-                1.0F / 500.0F, 1.0F, 0.6F, 1.0F, Domains.identity());
-        ContinentalShatteredContinent warped = new ContinentalShatteredContinent(
-                1.0F / 500.0F, 1.0F, 0.6F, 1.0F, perlinWarp(SEED));
+        ContinentalShatteredContinent plain = shattered(1.0F / 500.0F, 1.0F, 0.6F, 1.0F, Domains.identity());
+        ContinentalShatteredContinent warped = shattered(1.0F / 500.0F, 1.0F, 0.6F, 1.0F, perlinWarp(SEED));
         boolean anyDifference = false;
         for (int i = 0; i < SAMPLES; i++) {
             if (Float.floatToIntBits(plain.compute(x(i), z(i), SEED))
@@ -273,8 +345,7 @@ class ContinentTest {
 
     @Test
     void shatteredMapAllReachesWarpDrivers() {
-        ContinentalShatteredContinent continent = new ContinentalShatteredContinent(
-                1.0F / 500.0F, 1.0F, 0.6F, 1.0F, perlinWarp(SEED));
+        ContinentalShatteredContinent continent = shattered(1.0F / 500.0F, 1.0F, 0.6F, 1.0F, perlinWarp(SEED));
         assertTrue(countPerlinLeaves(continent) >= 2, "mapAll should reach the warp's perlin drivers");
     }
 
@@ -282,14 +353,16 @@ class ContinentTest {
     void continentModuleIsANoise() {
         // Sanity: the interface contract is satisfied and both impls report a
         // [0,1] range, which is what EndHeightmap will assume when multiplying.
-        IslandsContinent islands = new IslandsContinent(
-                1.0F / 300.0F, 1.0F, 0.6F, 0.5F, Domains.identity());
-        ContinentalShatteredContinent continent = new ContinentalShatteredContinent(
-                1.0F / 500.0F, 1.0F, 0.6F, 1.0F, Domains.identity());
+        IslandsContinent islands = islands(1.0F / 300.0F, 1.0F, 0.6F, 0.5F, Domains.identity());
+        CompleteContinent complete = new CompleteContinent(1.0F);
+        ContinentalShatteredContinent continent = shattered(1.0F / 500.0F, 1.0F, 0.6F, 1.0F, Domains.identity());
         assertNotNull(islands.mapAll(n -> n));
+        assertNotNull(complete.mapAll(n -> n));
         assertNotNull(continent.mapAll(n -> n));
         assertEquals(0.0F, islands.minValue(), 0.0F);
         assertEquals(1.0F, islands.maxValue(), 0.0F);
+        assertEquals(0.0F, complete.minValue(), 0.0F);
+        assertEquals(1.0F, complete.maxValue(), 0.0F);
         assertEquals(0.0F, continent.minValue(), 0.0F);
         assertEquals(1.0F, continent.maxValue(), 0.0F);
     }

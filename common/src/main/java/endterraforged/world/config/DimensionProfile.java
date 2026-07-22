@@ -25,10 +25,10 @@ package endterraforged.world.config;
  */
 public interface DimensionProfile {
 
-    /** Vertical size of the world in blocks, e.g. 4064 for a -2032..2032 End. */
+    /** Vertical size of the world in blocks, e.g. 512 for the standard -256..255 End. */
     int worldHeight();
 
-    /** World Y of the lowest block, e.g. -2032. */
+    /** World Y of the lowest block, e.g. -256 for the Standard specification. */
     int minY();
 
     /**
@@ -54,6 +54,26 @@ public interface DimensionProfile {
     boolean floatingIslandsEnabled();
 
     /**
+     * Fine-grained macro-landmass tuning. Older tests and lightweight profile
+     * implementations inherit compatibility defaults so adding new terrain
+     * controls does not force every caller to copy boilerplate or silently
+     * change legacy column tests into finite shelves.
+     */
+    default ContinentConfig continentConfig() {
+        return ContinentConfig.legacyDefaults();
+    }
+
+    /** Global terrain shaping controls applied after macro landness is sampled. */
+    default TerrainConfig terrainConfig() {
+        return TerrainConfig.DEFAULT;
+    }
+
+    /** Underground terrain modifier controls. Defaults keep legacy terrain unchanged. */
+    default SubsurfaceConfig subsurfaceConfig() {
+        return SubsurfaceConfig.DEFAULT;
+    }
+
+    /**
      * Convenience: the Y that worldgen should treat as the primary surface
      * reference. This is {@link #islandBaselineY()} in {@link SeaMode#NONE}
      * and {@link #seaLevelY()} otherwise, so algorithm code does not need to
@@ -63,7 +83,7 @@ public interface DimensionProfile {
         return seaMode().hasSea() ? seaLevelY() : islandBaselineY();
     }
 
-    /** World Y of the lowest block, alias of {@link #minY()} for readability at call sites. */
+    /** Exclusive world Y immediately above the dimension's highest block. */
     default int maxY() {
         return minY() + worldHeight();
     }

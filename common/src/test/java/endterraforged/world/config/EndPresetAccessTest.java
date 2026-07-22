@@ -110,6 +110,8 @@ class EndPresetAccessTest {
         EndPreset first = makeCustom();
         EndPreset second = new EndPreset(2048, -1024, 64, 0,
                 SeaMode.WITH_FLOOR, TopologyMode.CONTINENTAL_SHATTERED, true,
+                ContinentConfig.defaults(),
+                TerrainConfig.DEFAULT,
                 ErosionConfig.DEFAULT);
         EndPresetAccess.set(first);
         assertSame(first, EndPresetAccess.get(),
@@ -152,6 +154,8 @@ class EndPresetAccessTest {
     private static EndPreset makeCustom() {
         return new EndPreset(2048, -1024, 64, 0,
                 SeaMode.WITH_FLOOR, TopologyMode.CONTINENTAL_SHATTERED, true,
+                ContinentConfig.defaults(),
+                new TerrainConfig(0.75F, 2.0F),
                 new ErosionConfig(256, 64, 1.5F, 0.8F, 0.3F, 0.7F));
     }
 }

@@ -16,6 +16,7 @@ import net.minecraft.util.KeyDispatchDataCodec;
 import net.minecraft.world.level.levelgen.DensityFunction;
 
 import endterraforged.EndTerraForged;
+import endterraforged.world.continent.EndCentralRegionPolicy;
 import endterraforged.world.heightmap.EndDensity;
 
 /**
@@ -32,7 +33,7 @@ import endterraforged.world.heightmap.EndDensity;
  * (all void) — it is <em>never queried as-is</em> during real chunk gen.</p>
  *
  * <p>Later, when vanilla builds a {@code NoiseChunk} for the End dimension,
- * a stage-3.4 Mixin calls {@code noiseRouter.mapAll(visitor)} with an
+ * a Mixin composes the chunk visitor with an
  * {@link endterraforged.world.level.levelgen.EndDensityVisitor} that holds
  * the dimension's {@link EndDensity} (built from seed + DimensionProfile).
  * The visitor's {@code apply} swaps every placeholder it encounters for a
@@ -47,15 +48,16 @@ import endterraforged.world.heightmap.EndDensity;
  * placeholder + late binding via {@code mapAll} at chunk-build time.</p>
  *
  * <p><b>Thread safety.</b> {@link #INSTANCE} is stateless. {@link Bound}
- * holds an immutable {@link EndDensity} (backed by an immutable
- * {@link endterraforged.world.heightmap.EndHeightmap}); safe to query from
+ * holds a thread-safe {@link EndDensity} backed by an immutable
+ * {@link endterraforged.world.heightmap.EndHeightmap}; safe to query from
  * parallel chunk-gen threads. Each chunk gets its own {@code mapAll}-bound
- * router, so there is no shared mutable state.</p>
+ * router, while {@link EndDensity} keeps its column samples thread-local.</p>
  *
- * <p><b>Range.</b> {@link EndDensity#density} returns {@code 0.0} (void) or
- * {@code 1.0} (solid); {@link #minValue}/{@link #maxValue} mirror that.
- * Surface smoothing is left to vanilla's NoiseRouter interpolation, as in
- * the overworld — this function is the discrete solid/void decision only.</p>
+ * <p><b>Range.</b> Outside the central protected region,
+ * {@link EndDensity#density} returns {@code 0.0} (void) or {@code 1.0}
+ * (solid). Inside it, {@link Bound} delegates to vanilla End final density,
+ * and its reported bounds widen to preserve that fallback's contract. Surface
+ * smoothing remains owned by vanilla's NoiseRouter interpolation.</p>
  *
  * <p><b>Stage 6.3 sampling-time fallback.</b> {@link Bound#compute} wraps
  * the {@link EndDensity#density} call in {@code try (Exception) catch}. Under
@@ -76,9 +78,8 @@ import endterraforged.world.heightmap.EndDensity;
  * return {@code 0.0} (void). The block becomes air; the rest of the
  * chunk generates normally. Consistent with the stage 6.3 layered
  * fallback philosophy: construction failure degrades the whole End
- * dimension to vanilla; binding failure (MixinNoiseChunk redirect)
- * degrades one chunk to placeholder; sampling failure degrades one
- * block to void.</p>
+ * dimension to vanilla; binding failure rejects unsafe chunk generation;
+ * sampling failure degrades one block to void.</p>
  */
 public final class EndDensityFunction implements DensityFunction.SimpleFunction {
 
@@ -106,7 +107,7 @@ public final class EndDensityFunction implements DensityFunction.SimpleFunction 
 
     /**
      * Placeholder compute: returns {@code 0.0} (all void). Real chunk gen
-     * never reaches here — the stage-3.4 Mixin's {@code mapAll} replaces
+     * never reaches here — the NoiseChunk visitor composition replaces
      * this placeholder with a {@link Bound} instance before any sampling.
      * Returning 0 (rather than throwing) keeps the placeholder safe to
      * sample in isolation (e.g. in pre-worldgen codec round-trips).
@@ -146,10 +147,21 @@ public final class EndDensityFunction implements DensityFunction.SimpleFunction 
 
         private final EndDensity endDensity;
         private final int seed;
+        private final DensityFunction vanillaEndDensity;
 
         public Bound(EndDensity endDensity, int seed) {
+            this(endDensity, seed, null);
+        }
+
+        /**
+         * Creates a runtime ETF density leaf with an optional vanilla central
+         * fallback that has already been processed by the owning NoiseChunk's
+         * visitor.
+         */
+        public Bound(EndDensity endDensity, int seed, DensityFunction vanillaEndDensity) {
             this.endDensity = endDensity;
             this.seed = seed;
+            this.vanillaEndDensity = vanillaEndDensity;
         }
 
         @Override
@@ -164,6 +176,11 @@ public final class EndDensityFunction implements DensityFunction.SimpleFunction 
             // try/catch is defensive — see the class-level "Stage 6.3
             // sampling-time fallback" Javadoc for the full rationale.
             try {
+                if (this.vanillaEndDensity != null
+                        && EndCentralRegionPolicy.usesVanillaDensity(
+                                context.blockX(), context.blockZ())) {
+                    return this.vanillaEndDensity.compute(context);
+                }
                 return this.endDensity.density(
                         (float) context.blockX(),
                         context.blockY(),
@@ -197,12 +214,16 @@ public final class EndDensityFunction implements DensityFunction.SimpleFunction 
 
         @Override
         public double minValue() {
-            return 0.0;
+            return this.vanillaEndDensity == null
+                    ? 0.0
+                    : Math.min(0.0, this.vanillaEndDensity.minValue());
         }
 
         @Override
         public double maxValue() {
-            return 1.0;
+            return this.vanillaEndDensity == null
+                    ? 1.0
+                    : Math.max(1.0, this.vanillaEndDensity.maxValue());
         }
 
         @Override

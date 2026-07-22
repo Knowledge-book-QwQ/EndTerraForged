@@ -21,13 +21,13 @@ license="LGPL-3.0-or-later"
 [[dependencies.endterraforged]]
     modId="neoforge"
     mandatory=true
-    versionRange="[21,)"
+    versionRange="[${neoforgeVersion},)"
     ordering="NONE"
     side="BOTH"
 
 [[dependencies.endterraforged]]
 	modId = "minecraft"
 	mandatory = true
-	versionRange = "[1.21.1,)"
+	versionRange = "[${minecraftVersion},)"
 	ordering = "NONE"
 	side = "BOTH"

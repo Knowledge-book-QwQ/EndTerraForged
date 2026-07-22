@@ -42,7 +42,7 @@ package endterraforged.world.config;
  *       no manual reset needed (each create-world flow sets before
  *       creating)</li>
  *   <li>On server {@code halt(boolean)} RETURN: the holder is cleared by
- *       {@code MixinMinecraftServer.endTerraForged$clearPresetHolderOnServerHalt}
+     *       {@code MixinMinecraftServer.endTerraForged$clearRuntimeHoldersOnServerHalt}
  *       so a stale preset from a previous world load does not leak into
  *       the next world loaded in the same JVM session (single-player
  *       "save & quit to title" then load another world). Without this
@@ -131,6 +131,20 @@ public final class EndPresetAccess {
      */
     public static EndPreset getOrDefault() {
         EndPreset preset = current;
+        return (preset != null) ? preset : EndPresetDevelopmentProfiles.defaultFallback();
+    }
+
+    /**
+     * Returns a preset that is valid for the player-facing v3 editor.
+     *
+     * <p>The runtime accessor may return an explicitly enabled development
+     * profile that bypasses persistence by design. Passing that profile to the
+     * editor would make its validated builder reject the unsupported future
+     * layout. Editor entry points must use this method so development runtime
+     * overrides never become editable or persisted accidentally.</p>
+     */
+    public static EndPreset getEditableOrDefault() {
+        EndPreset preset = current;
         return (preset != null) ? preset : EndPreset.defaults();
     }
 
@@ -138,7 +152,7 @@ public final class EndPresetAccess {
      * Drops the published preset.
      *
      * <p>Production code clears the holder from
-     * {@code MixinMinecraftServer.endTerraForged$clearPresetHolderOnServerHalt}
+     * {@code MixinMinecraftServer.endTerraForged$clearRuntimeHoldersOnServerHalt}
      * (inject at RETURN of vanilla's {@code halt(boolean)}) when the
      * server shuts down — this prevents a stale preset from leaking into
      * the next world loaded in the same JVM session. Tests use this

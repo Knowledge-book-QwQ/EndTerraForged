@@ -5,6 +5,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import org.junit.jupiter.api.Test;
 
+import endterraforged.world.config.ClimateConfig;
+
 /**
  * Contract tests for {@link EndClimate}: three independent [0,1] channels,
  * temperature radial band + perturbation, moisture/wind standalone simplex,
@@ -48,6 +50,93 @@ class EndClimateTest {
             assertTrue(w >= 0.0F && w <= 1.0F,
                     "wind out of [0,1]: " + w);
         }
+    }
+
+    @Test
+    void configuredRangesClampTemperatureAndMoisture() {
+        EndClimate climate = new ClimateConfig(4000.0F, 600, 800, 1000, 0.25F,
+                0.2F, 0.35F, 0.0F,
+                0.45F, 0.65F, 0.0F).build(SEED);
+
+        for (int i = 0; i < SAMPLES; i++) {
+            float t = climate.getTemperature(x(i), z(i), SEED);
+            float m = climate.getMoisture(x(i), z(i), SEED);
+            assertTrue(t >= 0.2F && t <= 0.35F,
+                    "temperature out of configured range: " + t);
+            assertTrue(m >= 0.45F && m <= 0.65F,
+                    "moisture out of configured range: " + m);
+        }
+    }
+
+    @Test
+    void configuredBiasShiftsTemperatureAndMoistureMeans() {
+        EndClimate base = new ClimateConfig(4000.0F, 600, 800, 1000, 0.25F,
+                0.0F, 1.0F, 0.0F,
+                0.0F, 1.0F, 0.0F).build(SEED);
+        EndClimate biased = new ClimateConfig(4000.0F, 600, 800, 1000, 0.25F,
+                0.0F, 1.0F, 0.6F,
+                0.0F, 1.0F, -0.6F).build(SEED);
+
+        float baseTemperature = 0.0F;
+        float biasedTemperature = 0.0F;
+        float baseMoisture = 0.0F;
+        float biasedMoisture = 0.0F;
+        for (int i = 0; i < SAMPLES; i++) {
+            baseTemperature += base.getTemperature(x(i), z(i), SEED);
+            biasedTemperature += biased.getTemperature(x(i), z(i), SEED);
+            baseMoisture += base.getMoisture(x(i), z(i), SEED);
+            biasedMoisture += biased.getMoisture(x(i), z(i), SEED);
+        }
+
+        assertTrue(biasedTemperature > baseTemperature,
+                "positive temperature bias should raise sampled mean");
+        assertTrue(biasedMoisture < baseMoisture,
+                "negative moisture bias should lower sampled mean");
+    }
+
+    @Test
+    void falloffOneMatchesLegacyRangeOnlyConstructor() {
+        EndClimate legacy = new EndClimate(SEED, 4000.0F, 600, 600,
+                800, 700, 1000, 0.25F,
+                0.0F, 1.0F, 0.0F,
+                0.0F, 1.0F, 0.0F);
+        EndClimate explicit = new ClimateConfig(4000.0F, 600, 600,
+                800, 700, 1000, 0.25F,
+                1.0F, 0.0F, 1.0F, 0.0F,
+                1.0F, 0.0F, 1.0F, 0.0F).build(SEED);
+
+        for (int i = 0; i < SAMPLES; i++) {
+            assertEquals(Float.floatToIntBits(legacy.getTemperature(x(i), z(i), SEED)),
+                    Float.floatToIntBits(explicit.getTemperature(x(i), z(i), SEED)));
+            assertEquals(Float.floatToIntBits(legacy.getMoisture(x(i), z(i), SEED)),
+                    Float.floatToIntBits(explicit.getMoisture(x(i), z(i), SEED)));
+        }
+    }
+
+    @Test
+    void configuredFalloffChangesTemperatureAndMoistureShape() {
+        EndClimate base = new ClimateConfig(4000.0F, 600, 800, 1000, 0.25F,
+                1.0F, 0.0F, 1.0F, 0.0F,
+                1.0F, 0.0F, 1.0F, 0.0F).build(SEED);
+        EndClimate curved = new ClimateConfig(4000.0F, 600, 800, 1000, 0.25F,
+                4.0F, 0.0F, 1.0F, 0.0F,
+                4.0F, 0.0F, 1.0F, 0.0F).build(SEED);
+
+        boolean temperatureChanged = false;
+        boolean moistureChanged = false;
+        for (int i = 0; i < SAMPLES; i++) {
+            if (Float.floatToIntBits(base.getTemperature(x(i), z(i), SEED))
+                    != Float.floatToIntBits(curved.getTemperature(x(i), z(i), SEED))) {
+                temperatureChanged = true;
+            }
+            if (Float.floatToIntBits(base.getMoisture(x(i), z(i), SEED))
+                    != Float.floatToIntBits(curved.getMoisture(x(i), z(i), SEED))) {
+                moistureChanged = true;
+            }
+        }
+
+        assertTrue(temperatureChanged, "temperature falloff should alter sampled values");
+        assertTrue(moistureChanged, "moisture falloff should alter sampled values");
     }
 
     // ----- temperature radial band ----------------------------------------

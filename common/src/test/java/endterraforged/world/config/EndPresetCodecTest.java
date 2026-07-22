@@ -13,6 +13,7 @@ import com.mojang.serialization.DataResult;
 import com.mojang.serialization.JsonOps;
 
 import endterraforged.world.filter.ErosionConfig;
+import endterraforged.world.noise.DistanceFunction;
 
 /**
  * Round-trip and field-default tests for {@link EndPreset}'s DFU codec.
@@ -64,10 +65,57 @@ class EndPresetCodecTest {
         // (e.g. seaLevelY<->islandBaselineY) would be caught.
         EndPreset custom = new EndPreset(384, -64, 63, 100,
                 SeaMode.WITH_FLOOR, TopologyMode.CONTINENTAL_SHATTERED, true,
+                ContinentConfig.defaults(),
+                new TerrainConfig(0.75F, 2.5F),
+                new ClimateConfig(6000.0F, 900, 1200, 1500, 0.4F),
                 new ErosionConfig(200, 40, 1.5F, 1.2F, 0.7F, 0.3F));
         EndPreset roundTripped = decode(encode(custom));
         assertEquals(custom, roundTripped,
                 "a fully-custom preset must survive a codec round-trip unchanged");
+    }
+
+    @Test
+    void rtfMultiContinentConfigRoundTripsInsidePreset() {
+        ContinentConfig rtfMulti = new ContinentConfigBuilder(ContinentConfig.defaults())
+                .continentScale(3000)
+                .continentJitter(0.7F)
+                .continentAlgorithm(ContinentAlgorithm.RTF_MULTI)
+                .build();
+        EndPreset preset = new EndPresetBuilder(EndPreset.defaults())
+                .continentConfig(rtfMulti)
+                .build();
+
+        assertEquals(preset, decode(encode(preset)));
+    }
+
+    @Test
+    void formatTwoRtfPresetWithoutBandsKeepsLegacyPassthrough() {
+        JsonObject continent = new JsonObject();
+        continent.addProperty("algorithm", "RTF_MULTI");
+        continent.addProperty("continent_scale", 3000);
+        continent.addProperty("continent_jitter", 0.7F);
+        JsonObject preset = new JsonObject();
+        preset.addProperty("format_version", 2);
+        preset.addProperty("topology_mode", "OUTER_CONTINENTS");
+        preset.add("continent", continent);
+
+        EndPreset decoded = decode(preset);
+        assertEquals(2, decoded.formatVersion());
+        assertEquals(ContinentBandsConfig.LEGACY_PASSTHROUGH,
+                decoded.continentConfig().continentBands());
+    }
+
+    @Test
+    void formatThreePresetWithoutBandsFailsDecode() {
+        JsonObject continent = new JsonObject();
+        continent.addProperty("algorithm", "RTF_MULTI");
+        JsonObject preset = new JsonObject();
+        preset.addProperty("format_version", 3);
+        preset.add("continent", continent);
+
+        DataResult<EndPreset> result = EndPreset.CODEC.parse(JsonOps.INSTANCE, preset);
+        assertTrue(result.error().isPresent());
+        assertTrue(result.error().orElseThrow().message().contains("continent.bands"));
     }
 
     @Test
@@ -83,6 +131,11 @@ class EndPresetCodecTest {
         assertEquals(EndPreset.defaults().seaMode(), profile.seaMode());
         assertEquals(EndPreset.defaults().topologyMode(), profile.topologyMode());
         assertEquals(EndPreset.defaults().floatingIslandsEnabled(), profile.floatingIslandsEnabled());
+        assertEquals(EndPreset.defaults().continentConfig(), profile.continentConfig());
+        assertEquals(EndPreset.defaults().terrainConfig(), profile.terrainConfig());
+        assertEquals(EndPreset.defaults().climateConfig(), decoded.climateConfig());
+        assertEquals(EndPreset.defaults().biomeLayoutConfig(), decoded.biomeLayoutConfig());
+        assertEquals(EndPreset.defaults().subsurfaceConfig(), profile.subsurfaceConfig());
         // surfaceY()/maxY() are DimensionProfile defaults derived from minY+worldHeight.
         assertEquals(EndPreset.defaults().surfaceY(), profile.surfaceY());
         assertEquals(EndPreset.defaults().maxY(), profile.maxY());
@@ -91,11 +144,12 @@ class EndPresetCodecTest {
     // ----- field defaults -------------------------------------------------
 
     @Test
-    void emptyObjectDecodesToDefaults() {
-        // Every codec field has a default, so {} must yield EndPreset.defaults().
+    void emptyObjectDecodesToLegacyDefaults() {
+        // Old compact preset files had no format_version. They retain their
+        // historical topology rather than silently adopting new defaults.
         EndPreset decoded = decode(new JsonObject());
-        assertEquals(EndPreset.defaults(), decoded,
-                "an empty preset object must decode to the canonical defaults");
+        assertEquals(EndPreset.legacyDefaults(), decoded,
+                "an empty legacy preset object must retain the historical defaults");
     }
 
     @Test
@@ -108,6 +162,14 @@ class EndPresetCodecTest {
         EndPreset decoded = decode(partial);
         assertEquals(SeaMode.WITH_FLOOR, decoded.seaMode(),
                 "the explicitly-set field must be honoured");
+        assertEquals(TerrainConfig.DEFAULT, decoded.terrainConfig(),
+                "the omitted terrain field must fall back to the default");
+        assertEquals(ClimateConfig.DEFAULT, decoded.climateConfig(),
+                "the omitted climate field must fall back to the default");
+        assertEquals(BiomeLayoutConfig.DEFAULT, decoded.biomeLayoutConfig(),
+                "the omitted biome_layout field must fall back to the default");
+        assertEquals(SubsurfaceConfig.DEFAULT, decoded.subsurfaceConfig(),
+                "the omitted subsurface field must fall back to the default");
         assertEquals(ErosionConfig.DEFAULT, decoded.erosionConfig(),
                 "the omitted erosion field must fall back to the default");
     }
@@ -137,19 +199,24 @@ class EndPresetCodecTest {
     }
 
     @Test
-    void defaultsMatchLegacyEndDefaultsValues() {
-        // Continuity guard: EndPreset.defaults() must reproduce the exact
-        // values the deleted stage-3.2 EndDefaults.endDefaults() used, so the
-        // 5.1 switchover leaves production terrain byte-identical.
-        // (Values: 4064, -2032, 0, 0, NONE, ISLANDS, false.)
+    void defaultsUseStandardPlayerWorldEnvelope() {
+        // The default must stay in lockstep with the bundled End data pack.
+        // Larger envelopes are deliberate creation-time choices, not the
+        // default cost paid by every player and server.
         EndPreset d = EndPreset.defaults();
-        assertEquals(4064, d.worldHeight());
-        assertEquals(-2032, d.minY());
+        assertEquals(512, d.worldHeight());
+        assertEquals(-256, d.minY());
         assertEquals(0, d.seaLevelY());
         assertEquals(0, d.islandBaselineY());
         assertEquals(SeaMode.NONE, d.seaMode());
-        assertEquals(TopologyMode.ISLANDS, d.topologyMode());
+        assertEquals(TopologyMode.OUTER_CONTINENTS, d.topologyMode());
+        assertEquals(EndPreset.CURRENT_FORMAT_VERSION, d.formatVersion());
         assertFalse(d.floatingIslandsEnabled(), "defaults must keep floating islands off");
+        assertEquals(ContinentConfig.rtfMultiDefaults(), d.continentConfig());
+        assertEquals(TerrainConfig.DEFAULT, d.terrainConfig());
+        assertEquals(ClimateConfig.DEFAULT, d.climateConfig());
+        assertEquals(BiomeLayoutConfig.DEFAULT, d.biomeLayoutConfig());
+        assertEquals(SubsurfaceConfig.DEFAULT, d.subsurfaceConfig());
         assertEquals(ErosionConfig.DEFAULT, d.erosionConfig());
     }
 
@@ -164,6 +231,11 @@ class EndPresetCodecTest {
         // defaultsEncodeCompactly.)
         EndPreset custom = new EndPreset(384, -64, 63, 100,
                 SeaMode.WITH_FLOOR, TopologyMode.CONTINENTAL_SHATTERED, true,
+                customContinentConfig(),
+                new TerrainConfig(0.75F, 2.5F),
+                new ClimateConfig(6000.0F, 900, 1200, 1500, 0.4F),
+                customBiomeLayoutConfig(),
+                customSubsurfaceConfig(),
                 new ErosionConfig(200, 40, 1.5F, 1.2F, 0.7F, 0.3F));
         JsonObject json = encode(custom).getAsJsonObject();
         assertTrue(json.has("world_height"), "must serialise world_height");
@@ -173,24 +245,40 @@ class EndPresetCodecTest {
         assertTrue(json.has("sea_mode"), "must serialise sea_mode");
         assertTrue(json.has("topology_mode"), "must serialise topology_mode");
         assertTrue(json.has("floating_islands"), "must serialise floating_islands");
+        assertTrue(json.has("continent"), "must serialise continent");
+        assertTrue(json.has("terrain"), "must serialise terrain");
+        assertTrue(json.has("climate"), "must serialise climate");
+        assertTrue(json.has("biome_layout"), "must serialise biome_layout");
+        assertTrue(json.has("subsurface"), "must serialise subsurface");
         assertTrue(json.has("erosion"), "must serialise erosion");
+        assertTrue(json.has("format_version"), "must serialise format_version");
         // Enum values serialise by name.
         assertEquals("WITH_FLOOR", json.get("sea_mode").getAsString());
         assertEquals("CONTINENTAL_SHATTERED", json.get("topology_mode").getAsString());
     }
 
     @Test
-    void defaultsEncodeCompactlyToEmptyObject() {
-        // optionalFieldOf elides fields whose value equals the default, so the
-        // canonical defaults() preset serialises to {} — this is the intended
-        // compact form (a preset file stores only overridden values). A decoded
-        // {} must therefore equal defaults(), which emptyObjectDecodesToDefaults
-        // already pins; here we pin the encoding side so a future switch to a
-        // non-compact codec (which would bloat every default preset file) is
-        // caught.
+    void currentDefaultsEncodeMigrationMetadata() {
+        // topology_mode uses the historical ISLANDS codec default, so a new
+        // default preset must explicitly write both migration fields.
         JsonObject json = encode(EndPreset.defaults()).getAsJsonObject();
-        assertEquals(0, json.size(),
-                "defaults() must encode to an empty object (all fields elided): " + json);
+        assertEquals(3, json.size(),
+                "current defaults must write format, topology and continent migration fields: " + json);
+        assertEquals(EndPreset.CURRENT_FORMAT_VERSION, json.get("format_version").getAsInt());
+        assertEquals("OUTER_CONTINENTS", json.get("topology_mode").getAsString());
+        assertEquals("FLOATING_SHELF", json.getAsJsonObject("continent")
+                .get("volume_mode").getAsString());
+        assertTrue(json.getAsJsonObject("continent").getAsJsonObject("bands")
+                .get("enabled").getAsBoolean());
+    }
+
+    @Test
+    void unsupportedFormatVersionFailsDecode() {
+        JsonObject json = new JsonObject();
+        json.addProperty("format_version", EndPreset.CURRENT_FORMAT_VERSION + 1);
+        DataResult<EndPreset> result = EndPreset.CODEC.parse(JsonOps.INSTANCE, json);
+        assertTrue(result.error().isPresent());
+        assertTrue(result.error().orElseThrow().message().contains("format_version"));
     }
 
     @Test
@@ -206,6 +294,51 @@ class EndPresetCodecTest {
                   "sea_mode": "WITH_FLOOR",
                   "topology_mode": "CONTINENTAL_SHATTERED",
                   "floating_islands": true,
+                  "continent": {
+                    "islands_scale": 320,
+                    "continent_scale": 960,
+                    "continent_shape": "NATURAL",
+                    "continent_jitter": 0.8,
+                    "continent_skipping": 0.2,
+                    "continent_size_variance": 0.45,
+                    "continent_noise_octaves": 6,
+                    "continent_noise_gain": 0.3,
+                    "continent_noise_lacunarity": 3.5,
+                    "feature_spread": 0.9,
+                    "island_radius": 0.7,
+                    "island_scatter": 0.35,
+                    "rift_threshold": 0.55,
+                    "rift_strength": 0.75,
+                    "warp_scale": 420,
+                    "warp_strength": 64.0
+                  },
+                  "terrain": {
+                    "terrain_seed_offset": 42,
+                    "terrain_region_size": 1600,
+                    "global_vertical_scale": 0.75,
+                    "global_horizontal_scale": 2.5,
+                    "terrain_blend_range": 0.25,
+                    "terrain_shape": "ROLLING_RIDGES",
+                    "plains": {
+                      "weight": 0.5,
+                      "base_scale": 1.0,
+                      "vertical_scale": 2.0,
+                      "horizontal_scale": 3.0
+                    },
+                    "mountains": {
+                      "weight": 2.0,
+                      "base_scale": 1.25,
+                      "vertical_scale": 3.0,
+                      "horizontal_scale": 4.0
+                    }
+                  },
+                  "climate": {
+                    "climate_radius": 6000.0,
+                    "temperature_scale": 900,
+                    "moisture_scale": 1200,
+                    "wind_scale": 1500,
+                    "perturbation": 0.4
+                  },
                   "erosion": {
                     "droplets_per_chunk": 256,
                     "droplet_lifetime": 48,
@@ -220,6 +353,17 @@ class EndPresetCodecTest {
         EndPreset decoded = decode(parsed);
         assertEquals(384, decoded.worldHeight());
         assertEquals(SeaMode.WITH_FLOOR, decoded.seaMode());
+        assertEquals(960, decoded.continentConfig().continentScale());
+        assertEquals(DistanceFunction.NATURAL, decoded.continentConfig().continentShape());
+        assertEquals(new TerrainConfig(42, 1600, 0.75F, 2.5F, 0.25F, TerrainShape.ROLLING_RIDGES,
+                        new TerrainLayerConfig(0.5F, 1.0F, 2.0F, 3.0F),
+                        TerrainLayerConfig.DISABLED,
+                        TerrainLayerConfig.DISABLED,
+                        new TerrainLayerConfig(2.0F, 1.25F, 3.0F, 4.0F),
+                        TerrainLayerConfig.DISABLED),
+                decoded.terrainConfig());
+        assertEquals(new ClimateConfig(6000.0F, 900, 1200, 1500, 0.4F),
+                decoded.climateConfig());
         assertEquals(256, decoded.erosionConfig().dropletsPerChunk);
         // And the decoded form re-encodes back to a parseable, equal preset.
         EndPreset reDecoded = decode(encode(decoded));
@@ -241,8 +385,38 @@ class EndPresetCodecTest {
      * the {@link DataResult} (without unwrapping) so codec-level
      * validation tests can assert on the error message.
      */
+    @Test
+    void decodeRejectsRegionPlannedTerrainBeforeFormatVersionFour() {
+        DataResult<EndPreset> result = parseResult(
+                "{\"terrain\":{\"terrain_layout_mode\":\"REGION_PLANNED\","
+                        + "\"plains\":{\"weight\":1.0,\"base_scale\":1.0,"
+                        + "\"vertical_scale\":1.0,\"horizontal_scale\":1.0}}}");
+
+        assertTrue(result.error().isPresent());
+        String message = result.error().orElseThrow().message();
+        assertTrue(message.contains("terrain.terrain_layout_mode"));
+        assertTrue(message.contains("format_version 4"));
+    }
+
     private static DataResult<EndPreset> parseResult(String json) {
         return EndPreset.CODEC.parse(JsonOps.INSTANCE, JsonParser.parseString(json));
+    }
+
+    private static ContinentConfig customContinentConfig() {
+        return new ContinentConfig(320, 960, DistanceFunction.NATURAL,
+                0.8F, 0.2F, 0.45F, 6, 0.3F, 3.5F,
+                0.9F, 0.7F, 0.35F, 0.55F, 0.75F, 420, 64.0F);
+    }
+
+    private static BiomeLayoutConfig customBiomeLayoutConfig() {
+        return new BiomeLayoutConfig(32, 6.0F, 35.0F, -5.0F,
+                180, 3, 2.5F, 0.65F, 22.0F,
+                360, 2, 0.35F);
+    }
+
+    private static SubsurfaceConfig customSubsurfaceConfig() {
+        return new SubsurfaceConfig(new AbyssPitConfig(
+                true, 1700, 640, 0.65F, 0.2F, 512, 0.1F));
     }
 
     @Test
@@ -350,6 +524,39 @@ class EndPresetCodecTest {
                 "erosion_rate outside [0, 1] must fail decode via flatXmap");
         String msg = result.error().orElseThrow().message();
         assertTrue(msg.contains("erosion_rate"));
+    }
+
+    @Test
+    void decodeRejectsInvalidContinentConfigViaDelegation() {
+        DataResult<EndPreset> result = parseResult(
+                "{\"continent\": {\"warp_strength\": -1}}");
+        assertTrue(result.error().isPresent(),
+                "invalid continent config must fail decode via flatXmap");
+        String msg = result.error().orElseThrow().message();
+        assertTrue(msg.contains("continent"));
+        assertTrue(msg.contains("warp_strength"));
+    }
+
+    @Test
+    void decodeRejectsInvalidTerrainConfigViaDelegation() {
+        DataResult<EndPreset> result = parseResult(
+                "{\"terrain\": {\"global_horizontal_scale\": 6.0}}");
+        assertTrue(result.error().isPresent(),
+                "invalid terrain config must fail decode via flatXmap");
+        String msg = result.error().orElseThrow().message();
+        assertTrue(msg.contains("terrain"));
+        assertTrue(msg.contains("global_horizontal_scale"));
+    }
+
+    @Test
+    void decodeRejectsInvalidSubsurfaceConfigViaDelegation() {
+        DataResult<EndPreset> result = parseResult(
+                "{\"subsurface\": {\"abyss\": {\"depth\": 0}}}");
+        assertTrue(result.error().isPresent(),
+                "invalid subsurface config must fail decode via flatXmap");
+        String msg = result.error().orElseThrow().message();
+        assertTrue(msg.contains("subsurface"));
+        assertTrue(msg.contains("depth"));
     }
 
     @Test

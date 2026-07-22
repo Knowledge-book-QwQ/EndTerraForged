@@ -6,14 +6,14 @@
  * (LGPL-3.0-or-later). Lineage: TerraForged (dags) -> ReTerraForged
  * (raccoonman) -> EndTerraForged.
  *
- * Only the {@code domain(x, z, distance)} factory is ported — it is the sole
- * constructor the makeMountains recipes use (via Noises.warpPerlin). Upstream's
- * direction/compound/add/direct warp variants are deferred until a consumer
- * needs them, to avoid porting unused surface area.
+ * The continent path additionally uses RTF's perlin/simplex factory helpers
+ * and composite warp. Direction/add/direct variants remain deferred until a
+ * consumer needs them.
  */
 package endterraforged.world.noise.domain;
 
 import endterraforged.world.noise.Noise;
+import endterraforged.world.noise.Noises;
 
 /**
  * Factory for {@link Domain} instances.
@@ -36,6 +36,33 @@ public final class Domains {
      */
     public static Domain domain(Noise x, Noise z, Noise distance) {
         return new DomainWarp(x, z, distance);
+    }
+
+    /**
+     * Builds RTF's Perlin-driven warp using consecutive seed slots for its two
+     * axes.
+     */
+    public static Domain domainPerlin(int seed, int scale, int octaves, float strength) {
+        return domain(
+                Noises.perlin(seed, scale, octaves),
+                Noises.perlin(seed + 1, scale, octaves),
+                Noises.constant(strength));
+    }
+
+    /**
+     * Builds RTF's Simplex-driven warp using consecutive seed slots for its two
+     * axes.
+     */
+    public static Domain domainSimplex(int seed, int scale, int octaves, float strength) {
+        return domain(
+                Noises.simplex(seed, scale, octaves),
+                Noises.simplex(seed + 1, scale, octaves),
+                Noises.constant(strength));
+    }
+
+    /** Composes two coordinate transforms using the first transform's output as the second input. */
+    public static Domain compound(Domain input1, Domain input2) {
+        return new CompoundWarp(input1, input2);
     }
 
     /**

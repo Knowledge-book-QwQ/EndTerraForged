@@ -12,19 +12,36 @@
  */
 package endterraforged.world.heightmap;
 
+import java.util.Objects;
+
 import endterraforged.world.climate.ClimateModulator;
+import endterraforged.world.config.ContinentConfig;
+import endterraforged.world.config.ContinentCoastShape;
+import endterraforged.world.config.ContinentAlgorithm;
 import endterraforged.world.config.DimensionProfile;
 import endterraforged.world.config.SeaMode;
+import endterraforged.world.config.TerrainConfig;
+import endterraforged.world.config.TerrainLayerConfig;
+import endterraforged.world.config.TerrainLayoutMode;
+import endterraforged.world.config.TerrainShape;
 import endterraforged.world.config.TopologyMode;
+import endterraforged.world.continent.CompleteContinent;
 import endterraforged.world.continent.Continent;
+import endterraforged.world.continent.ContinentSignalBuffer;
+import endterraforged.world.continent.ContinentSignals;
 import endterraforged.world.continent.ContinentalShatteredContinent;
+import endterraforged.world.continent.BandedContinent;
 import endterraforged.world.continent.IslandsContinent;
+import endterraforged.world.continent.OuterContinentsContinent;
+import endterraforged.world.continent.RtfAdvancedContinent;
+import endterraforged.world.continent.RtfMultiContinent;
 import endterraforged.world.lake.EndLakeMap;
 import endterraforged.world.noise.Noise;
 import endterraforged.world.noise.Noises;
 import endterraforged.world.noise.domain.Domain;
 import endterraforged.world.noise.domain.Domains;
 import endterraforged.world.river.EndRiverMap;
+import endterraforged.world.terrain.TerrainRegionBuffer;
 
 /**
  * The End dimension's master height field: composes the continent landness
@@ -35,7 +52,8 @@ import endterraforged.world.river.EndRiverMap;
  * product is 0 — and thanks to {@code Multiply}'s zero short-circuit the
  * mountain layer is not even sampled there. Where the continent is solid, the
  * mountain shape passes through unattenuated, so peaks and valleys are driven
- * purely by the mountain recipe ({@link EndMountains#mountains2} by default).</p>
+ * purely by the configured mountain recipe ({@link TerrainShape#SHATTERED_RIDGES}
+ * by default).</p>
  *
  * <p><b>Vertical scaling.</b> The {@code [0,1]} terrain field is mapped to
  * world height as {@code surface + elevationRange × terrain}, where
@@ -51,12 +69,37 @@ import endterraforged.world.river.EndRiverMap;
  * query from parallel chunk-gen threads.</p>
  */
 public final class EndHeightmap {
+    /** Horizontal distance, in blocks, between the centre and profile samples. */
+    public static final float SURFACE_PROFILE_SAMPLE_DISTANCE = 4.0F;
+    private static final ThreadLocal<ContinentSignalBuffer> CONTINENT_SIGNAL_SCRATCH =
+            ThreadLocal.withInitial(ContinentSignalBuffer::new);
+    private static final ThreadLocal<EndLandmassSignalBuffer> LANDMASS_SIGNAL_SCRATCH =
+            ThreadLocal.withInitial(EndLandmassSignalBuffer::new);
+    private static final ThreadLocal<TerrainRegionBuffer> TERRAIN_REGION_SCRATCH =
+            ThreadLocal.withInitial(TerrainRegionBuffer::new);
+    private static final ThreadLocal<EndTerrainSignalBuffer> TERRAIN_SIGNAL_SCRATCH =
+            ThreadLocal.withInitial(EndTerrainSignalBuffer::new);
 
     private final Continent continent;
     private final Noise mountains;
     private final Noise terrain;
+    private final EndTerrainComposer terrainComposer;
+    private final EndTerrainRegionComposer terrainRegionComposer;
+    private final EndTerrainEligibilityPolicy terrainEligibilityPolicy;
     private final EndLevels levels;
     private final SeaMode seaMode;
+    private final EndLandmassVolume landmassVolume;
+    private final float globalVerticalScale;
+    private final float globalHorizontalScale;
+    private final float terrainRegionScale;
+    private final float terrainLayerAmplitudeScale;
+    private final float terrainLayerHorizontalScale;
+    private final boolean terrainUsesWorldCoordinates;
+    private final boolean continentBandsActive;
+    private final EndTerrainUpliftRuntime upliftRuntime;
+    private final EndArchipelagoMask archipelagoMask;
+    private final EndArchipelagoRelief archipelagoRelief;
+    private final boolean archipelagoActive;
     /**
      * Optional river post-processor. When set, {@link #getHeight} runs the
      * river carver over the raw terrain. May be {@code null}.
@@ -80,8 +123,8 @@ public final class EndHeightmap {
     private final ClimateModulator climateModulator;
 
     /**
-     * Builds an EndHeightmap from a dimension profile, using
-     * {@link EndMountains#mountains2} as the default mountain layer.
+     * Builds an EndHeightmap from a dimension profile, using the configured
+     * {@link TerrainShape} as the mountain layer.
      *
      * @param profile the dimension shape (sea level, topology, height range)
      * @param seed    the world seed; drives both the mountain recipe and the
@@ -89,7 +132,7 @@ public final class EndHeightmap {
      *                {@link #getHeight} / {@link #getLandness} at query time.
      */
     public EndHeightmap(DimensionProfile profile, int seed) {
-        this(profile, seed, EndMountains.mountains2(seed), null, null, null);
+        this(profile, seed, buildMountains(profile, seed), null, null, null);
     }
 
     /**
@@ -115,10 +158,39 @@ public final class EndHeightmap {
     EndHeightmap(DimensionProfile profile, int seed, Noise mountains,
                  ClimateModulator climateModulator, EndRiverMap riverMap, EndLakeMap lakeMap) {
         this.levels = new EndLevels(profile);
-        this.continent = buildContinent(profile.topologyMode(), seed);
+        this.continent = buildContinent(profile.topologyMode(), profile.continentConfig(), seed);
+        this.landmassVolume = new EndLandmassVolume(profile.continentConfig(), this.levels, seed);
         this.mountains = mountains;
         this.terrain = Noises.mul(continent, mountains);
         this.seaMode = profile.seaMode();
+        TerrainConfig terrainConfig = profile.terrainConfig();
+        this.terrainComposer = new EndTerrainComposer(terrainConfig, seed);
+        this.terrainRegionComposer = terrainConfig.terrainLayoutMode() == TerrainLayoutMode.REGION_PLANNED
+                ? new EndTerrainRegionComposer(terrainConfig, seed)
+                : null;
+        this.terrainEligibilityPolicy = this.terrainRegionComposer != null
+                ? new EndTerrainEligibilityPolicy(profile.topologyMode(), this.landmassVolume)
+                : null;
+        this.globalVerticalScale = terrainConfig.globalVerticalScale();
+        this.globalHorizontalScale = terrainConfig.globalHorizontalScale();
+        this.terrainRegionScale = terrainConfig.terrainRegionSize()
+                / (float) TerrainConfig.DEFAULT.terrainRegionSize();
+        TerrainLayerConfig mountainLayer = terrainConfig.mountains();
+        this.terrainLayerAmplitudeScale =
+                mountainLayer.weight() * mountainLayer.baseScale() * mountainLayer.verticalScale();
+        this.terrainLayerHorizontalScale = Math.max(0.01F, mountainLayer.horizontalScale());
+        this.terrainUsesWorldCoordinates = usesWorldCoordinates(
+                this.globalHorizontalScale, this.terrainRegionScale, this.terrainLayerHorizontalScale);
+        this.continentBandsActive = profile.topologyMode() == TopologyMode.OUTER_CONTINENTS
+                && profile.continentConfig().continentAlgorithm().supportsContinentBands()
+                && profile.continentConfig().continentBands().enabled();
+        this.upliftRuntime = new EndTerrainUpliftRuntime(profile.continentConfig());
+        this.archipelagoActive = isArchipelagoActive(profile);
+        this.archipelagoMask = this.archipelagoActive
+                ? new EndArchipelagoMask(seed) : EndArchipelagoMask.DISABLED;
+        this.archipelagoRelief = this.archipelagoActive
+                ? new EndArchipelagoRelief(seed, profile.continentConfig().continentScale())
+                : EndArchipelagoRelief.DISABLED;
         this.climateModulator = climateModulator;
         this.riverMap = riverMap;
         this.lakeMap = lakeMap;
@@ -132,8 +204,14 @@ public final class EndHeightmap {
      * rivers/lakes), so rivers carve the climate-modulated terrain.
      */
     public EndHeightmap withClimate(ClimateModulator climateModulator) {
-        return new EndHeightmap(this.levels, this.continent, this.mountains,
-                this.terrain, this.seaMode, climateModulator, this.riverMap, this.lakeMap);
+        return new EndHeightmap(this.levels, this.continent, this.mountains, this.terrain,
+                this.terrainComposer, this.terrainRegionComposer,
+                this.terrainEligibilityPolicy,
+                this.seaMode, this.landmassVolume, this.globalVerticalScale, this.globalHorizontalScale,
+                this.terrainRegionScale, this.terrainLayerAmplitudeScale, this.terrainLayerHorizontalScale,
+                this.continentBandsActive, this.upliftRuntime, this.archipelagoMask, this.archipelagoRelief,
+                this.archipelagoActive,
+                climateModulator, this.riverMap, this.lakeMap);
     }
 
     /**
@@ -143,8 +221,14 @@ public final class EndHeightmap {
      * detach rivers.
      */
     public EndHeightmap withRivers(EndRiverMap riverMap) {
-        return new EndHeightmap(this.levels, this.continent, this.mountains,
-                this.terrain, this.seaMode, this.climateModulator, riverMap, this.lakeMap);
+        return new EndHeightmap(this.levels, this.continent, this.mountains, this.terrain,
+                this.terrainComposer, this.terrainRegionComposer,
+                this.terrainEligibilityPolicy,
+                this.seaMode, this.landmassVolume, this.globalVerticalScale, this.globalHorizontalScale,
+                this.terrainRegionScale, this.terrainLayerAmplitudeScale, this.terrainLayerHorizontalScale,
+                this.continentBandsActive, this.upliftRuntime, this.archipelagoMask, this.archipelagoRelief,
+                this.archipelagoActive,
+                this.climateModulator, riverMap, this.lakeMap);
     }
 
     /**
@@ -154,19 +238,52 @@ public final class EndHeightmap {
      * detach lakes. Lakes run after rivers in {@link #getHeight}.
      */
     public EndHeightmap withLakes(EndLakeMap lakeMap) {
-        return new EndHeightmap(this.levels, this.continent, this.mountains,
-                this.terrain, this.seaMode, this.climateModulator, this.riverMap, lakeMap);
+        return new EndHeightmap(this.levels, this.continent, this.mountains, this.terrain,
+                this.terrainComposer, this.terrainRegionComposer,
+                this.terrainEligibilityPolicy,
+                this.seaMode, this.landmassVolume, this.globalVerticalScale, this.globalHorizontalScale,
+                this.terrainRegionScale, this.terrainLayerAmplitudeScale, this.terrainLayerHorizontalScale,
+                this.continentBandsActive, this.upliftRuntime, this.archipelagoMask, this.archipelagoRelief,
+                this.archipelagoActive,
+                this.climateModulator, this.riverMap, lakeMap);
     }
 
     private EndHeightmap(EndLevels levels, Continent continent, Noise mountains,
-                         Noise terrain, SeaMode seaMode,
-                         ClimateModulator climateModulator,
+                          Noise terrain, EndTerrainComposer terrainComposer,
+                          EndTerrainRegionComposer terrainRegionComposer,
+                          EndTerrainEligibilityPolicy terrainEligibilityPolicy,
+                          SeaMode seaMode, EndLandmassVolume landmassVolume,
+                         float globalVerticalScale, float globalHorizontalScale,
+                          float terrainRegionScale, float terrainLayerAmplitudeScale,
+                           float terrainLayerHorizontalScale,
+                           boolean continentBandsActive,
+                           EndTerrainUpliftRuntime upliftRuntime,
+                           EndArchipelagoMask archipelagoMask,
+                           EndArchipelagoRelief archipelagoRelief,
+                           boolean archipelagoActive,
+                           ClimateModulator climateModulator,
                          EndRiverMap riverMap, EndLakeMap lakeMap) {
         this.levels = levels;
         this.continent = continent;
         this.mountains = mountains;
         this.terrain = terrain;
+        this.terrainComposer = terrainComposer;
+        this.terrainRegionComposer = terrainRegionComposer;
+        this.terrainEligibilityPolicy = terrainEligibilityPolicy;
         this.seaMode = seaMode;
+        this.landmassVolume = landmassVolume;
+        this.globalVerticalScale = globalVerticalScale;
+        this.globalHorizontalScale = globalHorizontalScale;
+        this.terrainRegionScale = terrainRegionScale;
+        this.terrainLayerAmplitudeScale = terrainLayerAmplitudeScale;
+        this.terrainLayerHorizontalScale = terrainLayerHorizontalScale;
+        this.terrainUsesWorldCoordinates = usesWorldCoordinates(
+                globalHorizontalScale, terrainRegionScale, terrainLayerHorizontalScale);
+        this.continentBandsActive = continentBandsActive;
+        this.upliftRuntime = Objects.requireNonNull(upliftRuntime, "upliftRuntime");
+        this.archipelagoMask = Objects.requireNonNull(archipelagoMask, "archipelagoMask");
+        this.archipelagoRelief = Objects.requireNonNull(archipelagoRelief, "archipelagoRelief");
+        this.archipelagoActive = archipelagoActive;
         this.climateModulator = climateModulator;
         this.riverMap = riverMap;
         this.lakeMap = lakeMap;
@@ -189,15 +306,71 @@ public final class EndHeightmap {
      * @return normalised height in {@code [surface, 1]} (post-climate, post-river, post-lake)
      */
     public float getHeight(float x, float z, int seed) {
-        float h = getTerrainHeight(x, z, seed);
+        return getHeight(x, z, seed, 0.0F, 1.0F, false);
+    }
+
+    /**
+     * Height path for density sampling when the continent gate is already
+     * available for this exact world coordinate. Non-default horizontal
+     * scaling keeps the original terrain path because it samples the
+     * continent at transformed coordinates.
+     */
+    float getHeight(float x, float z, int seed, float landness) {
+        return getHeight(x, z, seed, landness, getInlandness(x, z, seed), true);
+    }
+
+    /** Density-only fast path with both cached continent signals. */
+    float getHeight(float x, float z, int seed, float landness, float inlandness) {
+        return getHeight(x, z, seed, landness, inlandness, true);
+    }
+
+    /** Density path that reuses the complete cached continent signal. */
+    float getHeight(float x, float z, int seed, ContinentSignalBuffer continentSignals) {
+        Objects.requireNonNull(continentSignals, "continentSignals");
+        return getHeight(x, z, seed, continentSignals.landness(), continentSignals.inlandness(),
+                true, continentSignals);
+    }
+
+    /** Density path that reuses the complete cached mainland and archipelago signal. */
+    public float getHeight(float x, float z, int seed, EndLandmassSignalBuffer landmassSignals) {
+        Objects.requireNonNull(landmassSignals, "landmassSignals");
+        float landness = landmassSignals.landness();
+        float inlandness = landmassSignals.inlandness();
+        float h = getTerrainHeightWithLandmass(x, z, seed, landmassSignals);
         if (this.climateModulator != null) {
             h = this.climateModulator.modulate(x, z, seed, this.levels, h);
         }
         if (this.riverMap != null) {
-            h = this.riverMap.modifyHeight(x, z, seed, this, h);
+            h = this.riverMap.modifyHeight(x, z, seed, this, h, landness);
         }
         if (this.lakeMap != null) {
-            h = this.lakeMap.modifyHeight(x, z, seed, this, h);
+            h = this.lakeMap.modifyHeight(x, z, seed, this, h, landness);
+        }
+        return h;
+    }
+
+    private float getHeight(float x, float z, int seed, float landness, float inlandness,
+                            boolean landnessKnown) {
+        return getHeight(x, z, seed, landness, inlandness, landnessKnown, null);
+    }
+
+    private float getHeight(float x, float z, int seed, float landness, float inlandness,
+                            boolean landnessKnown, ContinentSignalBuffer continentSignals) {
+        float h = landnessKnown
+                ? getTerrainHeight(x, z, seed, landness, inlandness, continentSignals)
+                : getTerrainHeight(x, z, seed);
+        if (this.climateModulator != null) {
+            h = this.climateModulator.modulate(x, z, seed, this.levels, h);
+        }
+        if (this.riverMap != null) {
+            h = landnessKnown
+                    ? this.riverMap.modifyHeight(x, z, seed, this, h, landness)
+                    : this.riverMap.modifyHeight(x, z, seed, this, h);
+        }
+        if (this.lakeMap != null) {
+            h = landnessKnown
+                    ? this.lakeMap.modifyHeight(x, z, seed, this, h, landness)
+                    : this.lakeMap.modifyHeight(x, z, seed, this, h);
         }
         return h;
     }
@@ -215,24 +388,321 @@ public final class EndHeightmap {
      * @return normalised height in {@code [surface, 1]} (pre-river)
      */
     public float getTerrainHeight(float x, float z, int seed) {
-        return this.levels.surface + this.levels.elevationRange * this.terrain.compute(x, z, seed);
+        if (this.archipelagoActive) {
+            EndLandmassSignalBuffer signals = LANDMASS_SIGNAL_SCRATCH.get();
+            sampleLandmassSignals(x, z, seed, signals);
+            return getTerrainHeightWithLandmass(x, z, seed, signals);
+        }
+        return getMainTerrainHeight(x, z, seed);
+    }
+
+    /** Returns raw terrain top while reusing a caller-sampled landmass signal. */
+    public float getTerrainHeight(float x, float z, int seed,
+                                  EndLandmassSignalBuffer landmassSignals) {
+        return getTerrainHeightWithLandmass(x, z, seed,
+                Objects.requireNonNull(landmassSignals, "landmassSignals"));
+    }
+
+    /** Returns the mainland terrain top before attached archipelago composition. */
+    public float getMainlandTerrainHeight(float x, float z, int seed) {
+        return getMainTerrainHeight(x, z, seed);
+    }
+
+    private float getMainTerrainHeight(float x, float z, int seed) {
+        if (this.terrainRegionComposer != null) {
+            ContinentSignalBuffer signals = CONTINENT_SIGNAL_SCRATCH.get();
+            sampleContinentSignals(x, z, seed, signals);
+            return composeTerrainHeight(x, z, seed, 0.0F, signals.landness(), signals.inlandness(), signals);
+        }
+        float horizontalScale = this.globalHorizontalScale
+                * this.terrainRegionScale
+                * this.terrainLayerHorizontalScale;
+        float sampleX = x / horizontalScale;
+        float sampleZ = z / horizontalScale;
+        ContinentSignalBuffer signals = CONTINENT_SIGNAL_SCRATCH.get();
+        sampleContinentSignals(sampleX, sampleZ, seed, signals);
+        float landness = signals.landness();
+        float terrain = landness != 0.0F
+                ? landness * this.mountains.compute(sampleX, sampleZ, seed)
+                : 0.0F;
+        return composeTerrainHeight(x, z, seed, terrain, landness, signals.inlandness(), null);
+    }
+
+    private float getTerrainHeightWithLandmass(float x, float z, int seed,
+                                               EndLandmassSignalBuffer landmassSignals) {
+        ContinentSignalBuffer mainland = landmassSignals.continentSignals();
+        float mainlandTop = getMainTerrainHeight(x, z, seed, mainland);
+        if (!this.archipelagoActive || landmassSignals.archipelagoLandness() <= 0.0F) {
+            return mainlandTop;
+        }
+        float archipelagoTop = this.archipelagoRelief.top(x, z, this.levels,
+                landmassSignals.archipelagoSignals());
+        return Math.max(mainlandTop, archipelagoTop);
+    }
+
+    private float getMainTerrainHeight(float x, float z, int seed,
+                                       ContinentSignalBuffer signals) {
+        if (this.terrainRegionComposer != null) {
+            return composeTerrainHeight(x, z, seed, 0.0F, signals.landness(), signals.inlandness(), signals);
+        }
+        if (!this.terrainUsesWorldCoordinates) {
+            return getMainTerrainHeight(x, z, seed);
+        }
+        float terrain = signals.landness() != 0.0F
+                ? signals.landness() * this.mountains.compute(x, z, seed)
+                : 0.0F;
+        return composeTerrainHeight(x, z, seed, terrain, signals.landness(), signals.inlandness(), signals);
+    }
+
+    private float getTerrainHeight(float x, float z, int seed, float landness, float inlandness) {
+        return getTerrainHeight(x, z, seed, landness, inlandness, null);
+    }
+
+    private float getTerrainHeight(float x, float z, int seed, float landness, float inlandness,
+                                   ContinentSignalBuffer continentSignals) {
+        if (this.terrainRegionComposer != null) {
+            return composeTerrainHeight(x, z, seed, 0.0F, landness, inlandness, continentSignals);
+        }
+        if (!this.terrainUsesWorldCoordinates) {
+            return getTerrainHeight(x, z, seed);
+        }
+        float terrain = landness != 0.0F
+                ? landness * this.mountains.compute(x, z, seed)
+                : 0.0F;
+        return composeTerrainHeight(x, z, seed, terrain, landness, inlandness, null);
+    }
+
+    private float composeTerrainHeight(float x, float z, int seed, float terrain, float landness,
+                                       float inlandness, ContinentSignalBuffer continentSignals) {
+        float reliefEnvelope = this.continentBandsActive
+                ? this.terrainComposer.reliefEnvelope(inlandness)
+                : 1.0F;
+        if (this.terrainRegionComposer != null
+                && this.upliftRuntime.enabled()
+                && continentSignals != null) {
+            float uplift = this.upliftRuntime.sample(x, z, continentSignals);
+            reliefEnvelope = Math.min(reliefEnvelope, 0.18F + 0.82F * uplift);
+        }
+        float terrainHeight = Math.clamp(
+                terrain
+                        * this.globalVerticalScale
+                        * this.terrainLayerAmplitudeScale
+                        * reliefEnvelope,
+                0.0F, 1.0F);
+        terrainHeight += auxiliaryContribution(x, z, seed, landness, inlandness)
+                * this.landmassVolume.edgeFade(landness)
+                * reliefEnvelope;
+        terrainHeight = Math.clamp(terrainHeight, 0.0F, 1.0F);
+        return this.levels.surface + this.levels.elevationRange * terrainHeight;
+    }
+
+    private static boolean usesWorldCoordinates(float globalHorizontalScale,
+                                                float terrainRegionScale,
+                                                float terrainLayerHorizontalScale) {
+        return globalHorizontalScale == 1.0F
+                && terrainRegionScale == 1.0F
+                && terrainLayerHorizontalScale == 1.0F;
     }
 
     /**
-     * Continent landness at {@code (x, z)} in {@code [0,1]}.
+     * Runtime auxiliary terrain selected at {@code (x, z)}, or
+     * {@link EndTerrainLayer#NONE} when all auxiliary layers are disabled.
      *
-     * <p>{@code 1} = solid landmass, {@code 0} = void / open space. This is
-     * the continent module's raw output, sampled independently of the mountain
-     * layer. The chunk generator uses this to decide whether to place any
-     * terrain at all (void vs land) independently of the height value.</p>
-     *
-     * @param x    world X
-     * @param z    world Z
-     * @param seed the world seed
-     * @return landness in {@code [0,1]}
+     * <p>This is primarily a preview/diagnostics hook. Terrain generation still
+     * consumes the scalar height returned by {@link #getTerrainHeight}.</p>
      */
+    public EndTerrainLayer auxiliaryTerrainAt(float x, float z, int seed) {
+        if (this.terrainRegionComposer != null) {
+            ContinentSignalBuffer signals = CONTINENT_SIGNAL_SCRATCH.get();
+            sampleContinentSignals(x, z, seed, signals);
+            return this.terrainRegionComposer.selectedLayer(x, z, TERRAIN_REGION_SCRATCH.get(),
+                    signals.landness(), signals.inlandness(), this.terrainEligibilityPolicy);
+        }
+        return this.terrainComposer.selectedLayer(x, z, seed);
+    }
+
+    /**
+     * Runtime auxiliary terrain blend at {@code (x, z)}. This mirrors the
+     * contribution path used by {@link #getTerrainHeight} and is intended for
+     * previews/diagnostics that need to visualise smooth terrain-layer borders.
+     */
+    public EndTerrainBlend auxiliaryTerrainBlendAt(float x, float z, int seed) {
+        if (this.terrainRegionComposer != null) {
+            ContinentSignalBuffer signals = CONTINENT_SIGNAL_SCRATCH.get();
+            sampleContinentSignals(x, z, seed, signals);
+            return this.terrainRegionComposer.selectedBlend(x, z, TERRAIN_REGION_SCRATCH.get(),
+                    signals.landness(), signals.inlandness(), this.terrainEligibilityPolicy);
+        }
+        return this.terrainComposer.selectedBlend(x, z, seed);
+    }
+
+    /**
+     * Samples the family-level terrain channels at {@code (x, z)} without
+     * allocating. The returned height channel is the same auxiliary scalar
+     * consumed by {@link #getTerrainHeight}; the other channels are runtime
+     * inputs for future erosion and content consumers.
+     *
+     * @param x world X
+     * @param z world Z
+     * @param seed world seed namespace
+     * @param output caller-owned destination buffer
+     */
+    public void sampleTerrainSignals(float x, float z, int seed, EndTerrainSignalBuffer output) {
+        if (output == null) {
+            throw new NullPointerException("output");
+        }
+        if (this.terrainRegionComposer != null) {
+            ContinentSignalBuffer signals = CONTINENT_SIGNAL_SCRATCH.get();
+            sampleContinentSignals(x, z, seed, signals);
+            this.terrainRegionComposer.sampleSignals(x, z, seed, TERRAIN_REGION_SCRATCH.get(), output,
+                    signals.landness(), signals.inlandness(), this.terrainEligibilityPolicy);
+            output.setUplift(this.upliftRuntime.sample(x, z, signals));
+            return;
+        }
+        EndTerrainLayer layer = this.terrainComposer.selectedLayer(x, z, seed);
+        float height = this.terrainComposer.auxiliaryContribution(x, z, seed);
+        output.set(height, roughness(layer), resistance(layer), layer == EndTerrainLayer.NONE
+                ? 0 : 1 << layer.ordinal());
+        ContinentSignalBuffer continentSignals = CONTINENT_SIGNAL_SCRATCH.get();
+        sampleContinentSignals(x, z, seed, continentSignals);
+        output.setUplift(this.upliftRuntime.sample(x, z, continentSignals));
+    }
+
+    /**
+     * Samples a caller-owned raw surface profile without changing the default
+     * height or density path.
+     *
+     * <p>The centre and four cardinal neighbours use the same raw top query
+     * as {@link #getTerrainHeight(float, float, int)}. The method performs
+     * four additional height samples only when explicitly called, making it a
+     * suitable input seam for later erosion, content and diagnostic systems
+     * without imposing a five-point cost on worldgen density sampling.</p>
+     *
+     * @param x world X
+     * @param z world Z
+     * @param seed world seed namespace
+     * @param output caller-owned destination buffer
+     */
+    public void sampleTerrainProfile(float x, float z, int seed, EndTerrainProfileBuffer output) {
+        if (output == null) {
+            throw new NullPointerException("output");
+        }
+        EndTerrainSignalBuffer signals = TERRAIN_SIGNAL_SCRATCH.get();
+        sampleTerrainSignals(x, z, seed, signals);
+
+        float distance = SURFACE_PROFILE_SAMPLE_DISTANCE;
+        float centre = getTerrainHeight(x, z, seed);
+        float east = getTerrainHeight(x + distance, z, seed);
+        float west = getTerrainHeight(x - distance, z, seed);
+        float south = getTerrainHeight(x, z + distance, seed);
+        float north = getTerrainHeight(x, z - distance, seed);
+        float dx = (east - west) / (2.0F * distance);
+        float dz = (south - north) / (2.0F * distance);
+        float gradient = (float) Math.sqrt(dx * dx + dz * dz);
+        float slope = gradient / (1.0F + gradient);
+        float laplacian = (east + west + south + north - 4.0F * centre)
+                / (distance * distance);
+        float curvature = laplacian / (1.0F + Math.abs(laplacian));
+        output.set(centre, slope, curvature, signals);
+    }
+
+    private float auxiliaryContribution(float x, float z, int seed, float landness, float inlandness) {
+        if (this.terrainRegionComposer != null) {
+            EndTerrainSignalBuffer signals = TERRAIN_SIGNAL_SCRATCH.get();
+            this.terrainRegionComposer.sampleSignals(x, z, seed, TERRAIN_REGION_SCRATCH.get(), signals,
+                    landness, inlandness, this.terrainEligibilityPolicy);
+            return signals.height();
+        }
+        return this.terrainComposer.auxiliaryContribution(x, z, seed);
+    }
+
+    private static float roughness(EndTerrainLayer layer) {
+        return switch (layer) {
+            case PLAINS -> 0.18F;
+            case HILLS -> 0.58F;
+            case PLATEAU -> 0.42F;
+            case MOUNTAINS -> 0.82F;
+            case VOLCANO -> 0.90F;
+            case NONE -> 0.0F;
+        };
+    }
+
+    private static float resistance(EndTerrainLayer layer) {
+        return switch (layer) {
+            case PLAINS -> 0.28F;
+            case HILLS -> 0.46F;
+            case PLATEAU -> 0.78F;
+            case MOUNTAINS -> 0.68F;
+            case VOLCANO -> 0.34F;
+            case NONE -> 0.0F;
+        };
+    }
+
+    /** Returns final physical landness, including the controlled archipelago layer. */
     public float getLandness(float x, float z, int seed) {
+        if (!this.archipelagoActive) {
+            return this.continent.compute(x, z, seed);
+        }
+        EndLandmassSignalBuffer signals = LANDMASS_SIGNAL_SCRATCH.get();
+        sampleLandmassSignals(x, z, seed, signals);
+        return signals.landness();
+    }
+
+    /** Returns mainland landness without attached archipelago features. */
+    public float getMainlandLandness(float x, float z, int seed) {
         return this.continent.compute(x, z, seed);
+    }
+
+    /** Returns a diagnostic snapshot of the continent signals at this world position. */
+    public ContinentSignals getContinentSignals(float x, float z, int seed) {
+        return this.continent.signalsAt(x, z, seed);
+    }
+
+    /** Returns the R2 inland-relief signal, or {@code 1} for legacy terrain paths. */
+    public float getInlandness(float x, float z, int seed) {
+        if (!this.continentBandsActive) {
+            return 1.0F;
+        }
+        ContinentSignalBuffer signals = CONTINENT_SIGNAL_SCRATCH.get();
+        sampleContinentSignals(x, z, seed, signals);
+        return signals.inlandness();
+    }
+
+    /** Returns the independent macro-continent uplift scalar in {@code [0,1]}. */
+    public float getUplift(float x, float z, int seed) {
+        ContinentSignalBuffer signals = CONTINENT_SIGNAL_SCRATCH.get();
+        sampleContinentSignals(x, z, seed, signals);
+        return this.upliftRuntime.sample(x, z, signals);
+    }
+
+    /** Returns the immutable uplift runtime used by this heightmap. */
+    public EndTerrainUpliftRuntime upliftRuntime() {
+        return this.upliftRuntime;
+    }
+
+    /** Returns whether the experimental, non-persisted archipelago runtime is active. */
+    public boolean archipelagoActive() {
+        return this.archipelagoActive;
+    }
+
+    /** Returns the attached archipelago mask runtime. */
+    public EndArchipelagoMask archipelagoMask() {
+        return this.archipelagoMask;
+    }
+
+    /** Samples mainland and archipelago signals into caller-owned storage. */
+    public void sampleLandmassSignals(float x, float z, int seed, EndLandmassSignalBuffer output) {
+        Objects.requireNonNull(output, "output");
+        output.resetDerived();
+        sampleContinentSignals(x, z, seed, output.continentSignals());
+        this.archipelagoMask.sample(x, z, seed, output.edge(), output.mainlandLandness(),
+                output.archipelagoSignals());
+        output.combine();
+    }
+
+    /** Writes continent signals into a caller-owned buffer without allocating. */
+    void sampleContinentSignals(float x, float z, int seed, ContinentSignalBuffer output) {
+        this.continent.sampleSignals(x, z, seed, output);
     }
 
     /** The {@link EndLevels} backing this heightmap's vertical scaling. */
@@ -243,6 +713,11 @@ public final class EndHeightmap {
     /** The {@link SeaMode} of the backing dimension profile. */
     public SeaMode seaMode() {
         return this.seaMode;
+    }
+
+    /** The vertical volume policy paired with this heightmap's continent configuration. */
+    public EndLandmassVolume landmassVolume() {
+        return this.landmassVolume;
     }
 
     /** The composed terrain noise tree ({@code continent × mountains}). */
@@ -280,26 +755,76 @@ public final class EndHeightmap {
     /**
      * Selects and wires the continent module for the dimension's topology.
      *
-     * <p>Both topologies share a perlin-driven domain warp (scale 300, strength
-     * 40) that deforms the cell grid so islands / rifts don't sit on a perfect
-     * lattice. The warp drivers use seeds offset by 100 from the world seed to
-     * stay independent of the mountain recipe's seed slots.</p>
+     * <p>Both topologies share a configurable perlin-driven domain warp that
+     * deforms the cell grid so islands / rifts don't sit on a perfect lattice.
+     * The warp drivers use seeds offset by 100 from the world seed to stay
+     * independent of the mountain recipe's seed slots.</p>
      *
-     * <p><b>Defaults.</b> The continent parameters (cell scale, island radius,
-     * scatter, rift threshold / strength) are hardcoded End-tuned defaults.
-     * Stage 5 (configurable UI) can lift these into the DimensionProfile; for
-     * now they live here as the single source of truth.</p>
+     * <p><b>Defaults.</b> The continent parameters come from
+     * {@link ContinentConfig}, so the same preset drives production terrain
+     * and the editor preview.</p>
      */
-    private static Continent buildContinent(TopologyMode mode, int seed) {
+    private static Continent buildContinent(TopologyMode mode, ContinentConfig config, int seed) {
+        Continent rtfContinent = buildRtfContinent(mode, config, seed);
+        if (rtfContinent != null) {
+            Continent continent = rtfContinent;
+            if (config.continentBands().enabled()) {
+                continent = new BandedContinent(continent, config.continentBands());
+            }
+            return new OuterContinentsContinent(continent);
+        }
         Domain warp = Domains.domain(
-                Noises.perlin(seed + 100, 300, 4),
-                Noises.perlin(seed + 101, 300, 4),
-                Noises.constant(40.0F));
+                Noises.perlin(seed + 100, config.warpScale(), config.continentNoiseOctaves(),
+                        config.continentNoiseLacunarity(), config.continentNoiseGain()),
+                Noises.perlin(seed + 101, config.warpScale(), config.continentNoiseOctaves(),
+                        config.continentNoiseLacunarity(), config.continentNoiseGain()),
+                Noises.constant(config.warpStrength()));
+        Noise coastNoise = config.coastShape() == ContinentCoastShape.ORGANIC
+                ? Noises.perlin(seed + 201, config.coastScale(), config.continentNoiseOctaves(),
+                config.continentNoiseLacunarity(), config.continentNoiseGain())
+                : Noises.constant(0.5F);
         return switch (mode) {
+            case CONTINENTAL -> new CompleteContinent(1.0F);
+            case OUTER_CONTINENTS -> new OuterContinentsContinent(new IslandsContinent(
+                    1.0F / config.outerContinentScale(), config.featureSpread(), config.continentShape(),
+                    config.continentJitter(), config.continentSkipping(), config.continentSizeVariance(),
+                    config.islandRadius(), config.islandScatter(), warp, config.coastShape(), coastNoise,
+                    config.coastStrength(), config.coastCellBlend()));
             case ISLANDS -> new IslandsContinent(
-                    1.0F / 400.0F, 1.0F, 0.6F, 0.5F, warp);
+                    1.0F / config.islandsScale(), config.featureSpread(), config.continentShape(),
+                    config.continentJitter(), config.continentSkipping(), config.continentSizeVariance(),
+                    config.islandRadius(), config.islandScatter(), warp, config.coastShape(), coastNoise,
+                    config.coastStrength(), config.coastCellBlend());
             case CONTINENTAL_SHATTERED -> new ContinentalShatteredContinent(
-                    1.0F / 800.0F, 1.0F, 0.6F, 0.85F, warp);
+                    1.0F / config.continentScale(), config.featureSpread(), config.continentShape(),
+                    config.continentJitter(), config.continentSkipping(), config.continentSizeVariance(),
+                    config.riftThreshold(), config.riftStrength(), warp);
+        };
+    }
+
+    private static Continent buildRtfContinent(TopologyMode mode, ContinentConfig config, int seed) {
+        if (mode != TopologyMode.OUTER_CONTINENTS) {
+            return null;
+        }
+        return switch (config.continentAlgorithm()) {
+            case RTF_MULTI -> new RtfMultiContinent(seed, config);
+            case RTF_ADVANCED -> new RtfAdvancedContinent(seed, config);
+            default -> null;
+        };
+    }
+
+    private static boolean isArchipelagoActive(DimensionProfile profile) {
+        return profile.topologyMode() == TopologyMode.OUTER_CONTINENTS
+                && profile.continentConfig().continentAlgorithm() == ContinentAlgorithm.RTF_MULTI
+                && profile.terrainConfig().terrainLayoutMode() == TerrainLayoutMode.REGION_PLANNED;
+    }
+
+    private static Noise buildMountains(DimensionProfile profile, int seed) {
+        TerrainConfig terrainConfig = profile.terrainConfig();
+        int terrainSeed = seed + terrainConfig.terrainSeedOffset();
+        return switch (terrainConfig.terrainShape()) {
+            case ROLLING_RIDGES -> EndMountains.mountains1(terrainSeed);
+            case SHATTERED_RIDGES -> EndMountains.mountains2(terrainSeed);
         };
     }
 }

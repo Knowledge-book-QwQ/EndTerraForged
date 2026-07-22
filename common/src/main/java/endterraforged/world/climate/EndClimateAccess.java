@@ -36,8 +36,9 @@ package endterraforged.world.climate;
  * when an End dimension is loaded; {@link #get} returns {@code null} before
  * the first End load and after {@link #clear}. {@link #clear} is exposed
  * for tests that need to assert the "no climate configured" fast path of
- * the biome selector — production code never clears the holder (a server
- * reload rebuilds the {@code RandomState} and re-publishes).</p>
+ * the biome selector, and production clears it from
+ * {@code MixinMinecraftServer.endTerraForged$clearRuntimeHoldersOnServerHalt}
+ * so integrated-server world switches cannot observe stale climate state.</p>
  *
  * <p><b>Why not inject the climate through EndRandomStateAccess.</b> The
  * interface-injected {@code EndRandomStateAccess} on {@code RandomState}
@@ -95,11 +96,10 @@ public final class EndClimateAccess {
     /**
      * Drops the published climate.
      *
-     * <p>Exposed for unit tests that need to assert the "no climate configured"
-     * fast path of the biome selector in isolation. Production code never
-     * clears the holder: a server reload rebuilds the {@code RandomState}
-     * and re-publishes a fresh {@link EndClimate} via {@link #set}, which
-     * atomically supersedes the previous reference.</p>
+     * <p>Used by unit tests that need to assert the "no climate configured"
+     * fast path of the biome selector in isolation, and by the server halt
+     * hook to prevent stale runtime state from leaking into the next world
+     * loaded in the same JVM session.</p>
      */
     public static void clear() {
         current = null;

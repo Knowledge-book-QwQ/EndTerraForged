@@ -3,11 +3,10 @@
  * Copyright (c) TerraForged
  *
  * EndTerraForged original design (LGPL-3.0-or-later). The serialisable,
- * per-world dimension profile for the End — supersedes the stage-3.2
- * EndDefaults placeholder. Informed by RTF's preset model (MIT), lineage
- * TerraForged (dags) -> ReTerraForged (raccoonman) -> EndTerraForged, but
- * the End-specific three-axis (topology × sea × floating-islands) shape and
- * the erosion-config embedding are EndTerraForged extensions.
+ * per-world dimension profile for the End. Informed by RTF's MIT-licensed
+ * preset model, while the End-specific topology, sea, floating-island,
+ * continent, terrain, climate, biome, subsurface and erosion settings remain
+ * EndTerraForged extensions.
  */
 package endterraforged.world.config;
 
@@ -25,28 +24,31 @@ import endterraforged.world.filter.ErosionConfig;
  * <p><b>Role.</b> Stage 3.2 shipped {@code EndDefaults} as a hardcoded
  * placeholder so the MC-integration Mixin had a concrete profile to build an
  * {@link endterraforged.world.heightmap.EndHeightmap} from. Stage 5.1 replaces
- * that placeholder with this record: same default values (so production terrain
- * is unchanged), but DFU-serialisable and carrying the erosion config, so a
- * world can ship its own preset and the stage-5 GUI can bind to its fields.</p>
+ * that placeholder with this record, making the profile DFU-serialisable and
+ * carrying erosion configuration so a world can ship its own preset and the
+ * GUI can bind to its fields. The current default is the standard player
+ * envelope; larger envelopes remain explicit preset requests.</p>
  *
  * <p><b>Fields.</b> The first seven components implement {@link DimensionProfile}
  * (world shape + the three orthogonal switches {@link SeaMode} /
- * {@link TopologyMode} / {@code floatingIslandsEnabled}). The eighth,
- * {@code erosionConfig}, is the stage-5.1 addition the ROADMAP calls out
- * ("暴露 ... 侵蚀参数"). Deeper tuning (continent cell scale, river density,
- * climate radius, ...) still lives in module {@code defaults()} factories and
- * is deferred to a later 5.x sub-step; this preset owns only what the ROADMAP
- * lists for 5.1.</p>
+ * {@link TopologyMode} / {@code floatingIslandsEnabled}). The embedded
+ * {@link ContinentConfig} owns macro-landmass tuning for full continents,
+ * shattered continents and islands; {@link TerrainConfig} owns global terrain
+ * shaping; {@link ClimateConfig} owns temperature, moisture and wind fields;
+ * {@link SubsurfaceConfig} owns underground carving controls; and
+ * {@link ErosionConfig} owns surface droplet erosion. Other module-specific
+ * defaults can still live beside their generators until they need preset-level
+ * editing.</p>
  *
  * <p><b>Serialisation.</b> {@link #CODEC} is a {@link RecordCodecBuilder} over
- * the eight components. Enum switches serialise by name via
+ * the record components. Enum switches serialise by name via
  * {@code Codec.STRING.xmap}; {@link ErosionConfig} embeds its own codec. Every
  * field has a default in the codec, so a preset JSON may omit any subset and
  * inherit the End defaults — this is what lets partial preset files and the
  * future GUI work without spelling out every field.</p>
  *
- * <p><b>Thread safety.</b> A record of immutable primitives + an immutable
- * {@link ErosionConfig}; safe to share across parallel chunk-gen threads.</p>
+ * <p><b>Thread safety.</b> A record of immutable primitives and immutable
+ * config records; safe to share across parallel chunk-gen threads.</p>
  *
  * @param worldHeight           vertical size of the world in blocks
  * @param minY                  world Y of the lowest block
@@ -56,12 +58,86 @@ import endterraforged.world.filter.ErosionConfig;
  * @param seaMode               how the dimension treats its sea level
  * @param topologyMode          macro shape of the landmass
  * @param floatingIslandsEnabled whether the extra floating-island overlay is on
+ * @param continentConfig       macro-landmass tuning for continents, rifts and islands
+ * @param terrainConfig         global vertical / horizontal terrain shaping
+ * @param climateConfig         climate noise controls for biome/surface variation
+ * @param biomeLayoutConfig     scalar controls for geometric biome rings
+ * @param subsurfaceConfig      underground carving controls
  * @param erosionConfig         droplet-erosion tuning for the surface filter
+ * @param formatVersion         persisted migration format, not an editor control
  */
 public record EndPreset(int worldHeight, int minY, int seaLevelY, int islandBaselineY,
                         SeaMode seaMode, TopologyMode topologyMode,
                         boolean floatingIslandsEnabled,
-                        ErosionConfig erosionConfig) implements DimensionProfile {
+                        ContinentConfig continentConfig,
+                        TerrainConfig terrainConfig,
+                         ClimateConfig climateConfig,
+                         BiomeLayoutConfig biomeLayoutConfig,
+                         SubsurfaceConfig subsurfaceConfig,
+                         ErosionConfig erosionConfig,
+                         int formatVersion) implements DimensionProfile {
+
+    /** Standard player-facing vertical envelope bundled with the default End data pack. */
+    public static final WorldVerticalBounds DEFAULT_WORLD_BOUNDS = new WorldVerticalBounds(-256, 512);
+    public static final int LEGACY_FORMAT_VERSION = 0;
+    public static final int CURRENT_FORMAT_VERSION = 3;
+
+    public EndPreset(int worldHeight, int minY, int seaLevelY, int islandBaselineY,
+                     SeaMode seaMode, TopologyMode topologyMode,
+                     boolean floatingIslandsEnabled,
+                     ContinentConfig continentConfig,
+                     TerrainConfig terrainConfig,
+                     ErosionConfig erosionConfig) {
+        this(worldHeight, minY, seaLevelY, islandBaselineY, seaMode, topologyMode,
+                floatingIslandsEnabled, continentConfig, terrainConfig,
+                ClimateConfig.DEFAULT, BiomeLayoutConfig.DEFAULT,
+                SubsurfaceConfig.DEFAULT, erosionConfig, CURRENT_FORMAT_VERSION);
+    }
+
+    public EndPreset(int worldHeight, int minY, int seaLevelY, int islandBaselineY,
+                     SeaMode seaMode, TopologyMode topologyMode,
+                     boolean floatingIslandsEnabled,
+                     ContinentConfig continentConfig,
+                     TerrainConfig terrainConfig,
+                     ClimateConfig climateConfig,
+                     ErosionConfig erosionConfig) {
+        this(worldHeight, minY, seaLevelY, islandBaselineY, seaMode, topologyMode,
+                floatingIslandsEnabled, continentConfig, terrainConfig,
+                climateConfig, BiomeLayoutConfig.DEFAULT,
+                SubsurfaceConfig.DEFAULT, erosionConfig, CURRENT_FORMAT_VERSION);
+    }
+
+    public EndPreset(int worldHeight, int minY, int seaLevelY, int islandBaselineY,
+                     SeaMode seaMode, TopologyMode topologyMode,
+                     boolean floatingIslandsEnabled,
+                     ContinentConfig continentConfig,
+                     TerrainConfig terrainConfig,
+                     ClimateConfig climateConfig,
+                     BiomeLayoutConfig biomeLayoutConfig,
+                     ErosionConfig erosionConfig) {
+        this(worldHeight, minY, seaLevelY, islandBaselineY, seaMode, topologyMode,
+                floatingIslandsEnabled, continentConfig, terrainConfig,
+                climateConfig, biomeLayoutConfig, SubsurfaceConfig.DEFAULT, erosionConfig,
+                CURRENT_FORMAT_VERSION);
+    }
+
+    /**
+     * Compatibility constructor for call sites that predate format-versioned
+     * preset migration. New in-memory presets always use the current format.
+     */
+    public EndPreset(int worldHeight, int minY, int seaLevelY, int islandBaselineY,
+                     SeaMode seaMode, TopologyMode topologyMode,
+                     boolean floatingIslandsEnabled,
+                     ContinentConfig continentConfig,
+                     TerrainConfig terrainConfig,
+                     ClimateConfig climateConfig,
+                     BiomeLayoutConfig biomeLayoutConfig,
+                     SubsurfaceConfig subsurfaceConfig,
+                     ErosionConfig erosionConfig) {
+        this(worldHeight, minY, seaLevelY, islandBaselineY, seaMode, topologyMode,
+                floatingIslandsEnabled, continentConfig, terrainConfig, climateConfig,
+                biomeLayoutConfig, subsurfaceConfig, erosionConfig, CURRENT_FORMAT_VERSION);
+    }
 
     /**
      * String codec for the {@link SeaMode} switch (serialises by enum name).
@@ -95,9 +171,9 @@ public record EndPreset(int worldHeight, int minY, int seaLevelY, int islandBase
     );
 
     /**
-     * DFU codec for {@link EndPreset}. Every field has a default equal to
-     * {@link #defaults()}, so a preset JSON may omit any subset of fields and
-     * still decode to a valid profile.
+     * DFU codec for {@link EndPreset}. Most fields have current defaults, but
+     * migration-sensitive fields use their historical values when omitted so
+     * existing compact JSON is never silently reinterpreted as new terrain.
      *
      * <p>The builder is wrapped with {@link Codec#flatXmap} through
      * {@link EndPresetValidator#validate} on the decode side, so a
@@ -123,12 +199,24 @@ public record EndPreset(int worldHeight, int minY, int seaLevelY, int islandBase
                             .forGetter(EndPreset::islandBaselineY),
                     SEA_MODE_CODEC.optionalFieldOf("sea_mode", defaults().seaMode)
                             .forGetter(EndPreset::seaMode),
-                    TOPOLOGY_MODE_CODEC.optionalFieldOf("topology_mode", defaults().topologyMode)
+                    TOPOLOGY_MODE_CODEC.optionalFieldOf("topology_mode", TopologyMode.ISLANDS)
                             .forGetter(EndPreset::topologyMode),
                     Codec.BOOL.optionalFieldOf("floating_islands", defaults().floatingIslandsEnabled)
                             .forGetter(EndPreset::floatingIslandsEnabled),
+                    ContinentConfig.CODEC.optionalFieldOf("continent", ContinentConfig.legacyDefaults())
+                            .forGetter(EndPreset::continentConfig),
+                    TerrainConfig.CODEC.optionalFieldOf("terrain", defaults().terrainConfig)
+                            .forGetter(EndPreset::terrainConfig),
+                    ClimateConfig.CODEC.optionalFieldOf("climate", defaults().climateConfig)
+                            .forGetter(EndPreset::climateConfig),
+                    BiomeLayoutConfig.CODEC.optionalFieldOf("biome_layout", defaults().biomeLayoutConfig)
+                            .forGetter(EndPreset::biomeLayoutConfig),
+                    SubsurfaceConfig.CODEC.optionalFieldOf("subsurface", defaults().subsurfaceConfig)
+                            .forGetter(EndPreset::subsurfaceConfig),
                     ErosionConfig.CODEC.optionalFieldOf("erosion", defaults().erosionConfig)
-                            .forGetter(EndPreset::erosionConfig)
+                            .forGetter(EndPreset::erosionConfig),
+                    Codec.INT.optionalFieldOf("format_version", LEGACY_FORMAT_VERSION)
+                            .forGetter(EndPreset::formatVersion)
             ).apply(instance, instance.stable(EndPreset::new))
     );
 
@@ -143,16 +231,61 @@ public record EndPreset(int worldHeight, int minY, int seaLevelY, int islandBase
             EndPresetValidator::validate,
             preset -> DataResult.success(preset));
 
+    /** Returns the persisted vertical envelope requested by this preset. */
+    public WorldVerticalBounds worldBounds() {
+        return new WorldVerticalBounds(this.minY, this.worldHeight);
+    }
+
     /**
-     * The End's canonical default preset: full RTF-matching height range
-     * ({@code -2032..2032}, 4064 blocks), no sea, discrete islands, no extra
-     * floating-island layer, classical droplet-erosion tuning. Matches the
-     * values the stage-3.2 {@code EndDefaults} placeholder used, so switching
-     * production to {@code EndPreset.defaults()} leaves terrain unchanged.
+     * Returns this preset with only its runtime world envelope replaced.
+     *
+     * <p>This is used after Minecraft has selected the actual dimension data.
+     * It deliberately preserves all terrain, climate and underground settings;
+     * callers must validate reference Y values against {@code bounds} before
+     * using this method.</p>
+     */
+    public EndPreset withWorldBounds(WorldVerticalBounds bounds) {
+        java.util.Objects.requireNonNull(bounds, "bounds");
+        return new EndPreset(bounds.height(), bounds.minY(), this.seaLevelY,
+                this.islandBaselineY, this.seaMode, this.topologyMode,
+                this.floatingIslandsEnabled, this.continentConfig, this.terrainConfig,
+                this.climateConfig, this.biomeLayoutConfig, this.subsurfaceConfig,
+                this.erosionConfig, this.formatVersion);
+    }
+
+    /**
+     * The default player-facing End envelope: 512 blocks from -256 to 255.
+     * This keeps the surface near Y=0 with comparable space above and below
+     * it while avoiding the eightfold per-column cost of the former 4064-block
+     * default. Larger envelopes will be explicit creation-time data-pack
+     * choices, not mutable editor fields.
      */
     public static EndPreset defaults() {
-        return new EndPreset(4064, -2032, 0, 0,
+        return new EndPreset(DEFAULT_WORLD_BOUNDS.height(), DEFAULT_WORLD_BOUNDS.minY(), 0, 0,
+                SeaMode.NONE, TopologyMode.OUTER_CONTINENTS, false,
+                ContinentConfig.rtfMultiDefaults(),
+                TerrainConfig.DEFAULT,
+                ClimateConfig.DEFAULT,
+                BiomeLayoutConfig.DEFAULT,
+                SubsurfaceConfig.DEFAULT,
+                ErosionConfig.DEFAULT,
+                CURRENT_FORMAT_VERSION);
+    }
+
+    /**
+     * Historical default used only when a preset omits {@code format_version}.
+     * It prevents existing compact {@code {}} files from silently changing
+     * their topology when the current default evolves.
+     */
+    public static EndPreset legacyDefaults() {
+        return new EndPreset(DEFAULT_WORLD_BOUNDS.height(), DEFAULT_WORLD_BOUNDS.minY(), 0, 0,
                 SeaMode.NONE, TopologyMode.ISLANDS, false,
-                ErosionConfig.DEFAULT);
+                ContinentConfig.legacyDefaults(),
+                TerrainConfig.DEFAULT,
+                ClimateConfig.DEFAULT,
+                BiomeLayoutConfig.DEFAULT,
+                SubsurfaceConfig.DEFAULT,
+                ErosionConfig.DEFAULT,
+                LEGACY_FORMAT_VERSION);
     }
 }

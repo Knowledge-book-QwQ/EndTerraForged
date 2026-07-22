@@ -4,12 +4,15 @@
   "minVersion": "0.8",
   "compatibilityLevel": "JAVA_21",
   "mixins": [
+    "MixinChunkMap",
     "MixinRandomState",
+    "MixinNoiseBasedChunkGenerator",
     "MixinNoiseChunk",
+    "NoiseRouterDataAccessor",
     "MixinMinecraftServer"
   ],
   "client": [
-    "MixinPresetEditor"
+    "MixinCreateWorldScreen"
   ],
   "injectors": {
     "defaultRequire": 1

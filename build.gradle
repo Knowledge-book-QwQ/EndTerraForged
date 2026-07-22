@@ -12,6 +12,9 @@ subprojects {
 
     loom {
         silentMojangMappingsLicense()
+        if (project.name == "common") {
+            accessWidenerPath = project.file("src/main/resources/endterraforged.accesswidener")
+        }
     }
 
     dependencies {
@@ -30,8 +33,41 @@ allprojects {
     group = rootProject.maven_group
 
     repositories {
-        maven { url "https://maven.shedaniel.me" }
-        maven { url 'https://maven.minecraftforge.net/' }
+        mavenCentral {
+            content {
+                includeGroup "com.electronwill.night-config"
+                includeGroup "org.junit.jupiter"
+                includeGroup "org.junit.platform"
+                includeGroup "org.apiguardian"
+                includeGroup "org.opentest4j"
+            }
+        }
+        maven {
+            url "https://maven.fabricmc.net/"
+            content {
+                includeGroup "net.fabricmc"
+                includeGroup "net.fabricmc.fabric-api"
+            }
+        }
+        maven {
+            url "https://maven.architectury.dev/"
+            content {
+                includeGroupByRegex "dev\\.architectury.*"
+            }
+        }
+        maven {
+            url "https://maven.shedaniel.me"
+            content {
+                includeGroupByRegex "me\\.shedaniel.*"
+                includeGroupByRegex "dev\\.architectury.*"
+            }
+        }
+        maven {
+            url 'https://maven.minecraftforge.net/'
+            content {
+                includeGroup "net.minecraftforge"
+            }
+        }
     }
 
     tasks.withType(JavaCompile) {
@@ -41,5 +77,359 @@ allprojects {
 
     java {
         withSourcesJar()
+    }
+}
+
+def releaseVerificationRequested = gradle.startParameter.taskNames.any { taskName ->
+    taskName == "verifyReleaseArtifacts" || taskName.endsWith(":verifyReleaseArtifacts")
+}
+
+if (gradle.startParameter.configureOnDemand && releaseVerificationRequested) {
+    throw new GradleException(
+            "verifyReleaseArtifacts must run without --configure-on-demand because Architectury transform tasks need full project configuration.")
+}
+
+gradle.taskGraph.whenReady { graph ->
+    if (gradle.startParameter.configureOnDemand && graph.hasTask(":verifyReleaseArtifacts")) {
+        throw new GradleException(
+                "verifyReleaseArtifacts must run without --configure-on-demand because Architectury transform tasks need full project configuration.")
+    }
+}
+
+def criticalCommonEntries = [
+        "endterraforged/EndTerraForged.class",
+        "endterraforged/world/heightmap/EndWorldgenBootstrap.class",
+        "endterraforged/world/heightmap/EndLevels.class",
+        "endterraforged/world/heightmap/EndDensity.class",
+        "endterraforged/world/heightmap/EndTerrainRegionComposer.class",
+        "endterraforged/world/heightmap/EndTerrainRidgeRuntime.class",
+        "endterraforged/world/heightmap/EndTerrainVolcanoRuntime.class",
+        "endterraforged/world/heightmap/TerrainFamilyRuntime.class",
+        "endterraforged/world/config/TerrainLayoutMode.class",
+        "endterraforged/world/noise/Billow.class",
+        "endterraforged/world/noise/Cubic.class",
+        "endterraforged/world/noise/Terrace.class",
+        "endterraforged/world/terrain/TerrainRegionBuffer.class",
+        "endterraforged/world/terrain/TerrainRegionLayout.class",
+        "endterraforged/world/terrain/TerrainRegionPlan.class",
+        "endterraforged/world/level/levelgen/EndDensitySettingsClassifier.class",
+        "endterraforged/world/level/levelgen/EndVoidFluidPicker.class",
+        "endterraforged/world/level/levelgen/EndOceanFluidPicker.class",
+        "endterraforged/world/heightmap/EndSubsurface.class",
+        "endterraforged/world/config/EndPreset.class",
+        "endterraforged/world/config/EndPresetRuntimeResolver.class",
+        "endterraforged/world/config/WorldVerticalBounds.class",
+        "endterraforged/world/config/EndWorldDimensionsAdapter.class",
+        "endterraforged/world/config/EndPresetAccess.class",
+        "endterraforged/world/config/EndPresetLibrary.class",
+        "endterraforged/world/config/EndPresetStorage.class",
+        "endterraforged/world/config/ClimateConfig.class",
+        "endterraforged/world/config/ContinentConfig.class",
+        "endterraforged/world/config/TerrainConfig.class",
+        "endterraforged/world/config/TerrainConfigBuilder.class",
+        "endterraforged/world/config/BiomeLayoutConfig.class",
+        "endterraforged/world/config/SubsurfaceConfig.class",
+        "endterraforged/world/config/AbyssPitConfig.class",
+        "endterraforged/world/config/CaveSystemConfig.class",
+        "endterraforged/world/level/biome/EndBiomeLayout.class",
+        "endterraforged/world/level/biome/EndBiomeLayoutAccess.class",
+        "endterraforged/world/preview/TerrainPreviewSampler.class",
+        "endterraforged/world/preview/TerrainPreviewMode.class",
+        "endterraforged/world/preview/CaveSlicePreviewSampler.class",
+        "endterraforged/world/cave/EndCaveGraph.class",
+        "endterraforged/client/gui/screen/EndPresetEditorScreen.class",
+        "endterraforged/client/gui/screen/CreateWorldPresetEditorButtonPlan.class",
+        "endterraforged/client/gui/screen/EndPresetEditorContext.class",
+        "endterraforged/client/gui/screen/WorldVerticalBoundsEditorPolicy.class",
+        "endterraforged/client/gui/screen/EndPresetEditorBootstrap.class",
+        "endterraforged/client/gui/screen/EndPresetEditorLaunchPolicy.class",
+        "endterraforged/client/gui/screen/EndPresetEditorPersistence.class",
+        "endterraforged/client/gui/screen/EndPresetEditorFinishPolicy.class",
+        "endterraforged/client/gui/screen/EndPresetEditorActionVisibilityPolicy.class",
+        "endterraforged/client/gui/screen/EndPresetLibraryActionPolicy.class",
+        "endterraforged/client/gui/screen/EndPresetLibraryScreen.class",
+        "endterraforged/client/gui/screen/LdLib2ActionBars.class",
+        "endterraforged/client/gui/screen/PauseMenuPresetEditorButtonPlan.class",
+        "endterraforged/mixin/MixinCreateWorldScreen.class",
+        "endterraforged/mixin/MixinNoiseBasedChunkGenerator.class",
+        "endterraforged/client/gui/widget/ActionButtonLayout.class",
+        "endterraforged/client/gui/widget/CaveSlicePreviewLayout.class",
+        "endterraforged/client/gui/widget/CaveSlicePreviewWidget.class",
+        "endterraforged/client/gui/widget/PresetLibraryEntryLayout.class",
+        "endterraforged/client/gui/widget/TerrainPreviewWidget.class"
+]
+
+def criticalCommonResourceEntries = [
+        "endterraforged-common.mixins.json",
+        "pack.mcmeta",
+        "assets/endterraforged/lang/en_us.json",
+        "assets/endterraforged/lang/zh_cn.json",
+        "data/minecraft/dimension/the_end.json",
+        "data/minecraft/dimension_type/the_end.json",
+        "data/minecraft/worldgen/noise_settings/the_end.json",
+        "data/endterraforged/presets/dimension/cold_end.json",
+        "data/endterraforged/presets/dimension/temperate_end.json",
+        "data/endterraforged/presets/dimension/hot_end.json"
+]
+
+def commonTransformOnlyEntries = [
+        "architectury.common.json",
+        "endterraforged.accesswidener"
+]
+
+def fabricCommonResourceEntries = [
+        "endterraforged.accesswidener"
+]
+
+def verifyCommonResourceManifest = {
+    def resourcesDir = project(":common").file("src/main/resources")
+    def sourceEntries = project.fileTree(resourcesDir).matching {
+        include "**/*"
+    }.files.collect { file ->
+        resourcesDir.toPath().relativize(file.toPath()).toString().replace(File.separator, "/")
+    }.sort()
+    def classifiedEntries = (criticalCommonResourceEntries + commonTransformOnlyEntries).toSet()
+
+    def unclassifiedEntries = sourceEntries.findAll { entry -> !classifiedEntries.contains(entry) }
+    if (!unclassifiedEntries.isEmpty()) {
+        throw new GradleException(
+                "common resources must be classified in verifyReleaseArtifacts before release:\n"
+                        + unclassifiedEntries.join("\n"))
+    }
+
+    def missingSourceEntries = classifiedEntries.findAll { entry -> !sourceEntries.contains(entry) }.sort()
+    if (!missingSourceEntries.isEmpty()) {
+        throw new GradleException(
+                "verifyReleaseArtifacts lists common resources that no longer exist:\n"
+                        + missingSourceEntries.join("\n"))
+    }
+
+    logger.lifecycle("Verified common resource manifest: ${sourceEntries.size()} resources classified")
+}
+
+def commonTransformJar = { String loader ->
+    project(":common").tasks.named("transformProduction${loader}").get().archiveFile.get().asFile
+}
+
+def verifyReleaseJar = { String label, File jarFile, List<String> entries ->
+    if (!jarFile.isFile()) {
+        throw new GradleException("Missing ${label}: ${jarFile}")
+    }
+    if (jarFile.length() < 1024L) {
+        throw new GradleException("${label} is unexpectedly small: ${jarFile} (${jarFile.length()} bytes)")
+    }
+
+    def zip = new java.util.zip.ZipFile(jarFile)
+    try {
+        entries.each { entry ->
+            if (zip.getEntry(entry) == null) {
+                throw new GradleException("${label} ${jarFile.name} is missing ${entry}")
+            }
+        }
+    } finally {
+        zip.close()
+    }
+
+    logger.lifecycle("Verified ${label}: ${jarFile}")
+}
+
+def readJarEntryText = { String label, File jarFile, String entry ->
+    def zip = new java.util.zip.ZipFile(jarFile)
+    try {
+        def zipEntry = zip.getEntry(entry)
+        if (zipEntry == null) {
+            throw new GradleException("${label} ${jarFile.name} is missing ${entry}")
+        }
+        return zip.getInputStream(zipEntry).getText("UTF-8")
+    } finally {
+        zip.close()
+    }
+}
+
+def requireMetadataValue = { String label, String name, Object actual, Object expected ->
+    if (actual != expected) {
+        throw new GradleException("${label} metadata ${name} expected ${expected}, got ${actual}")
+    }
+}
+
+def requireMetadataListContains = { String label, String name, Object actual, Object expected ->
+    if (!(actual instanceof Collection) || !actual.contains(expected)) {
+        throw new GradleException("${label} metadata ${name} must contain ${expected}, got ${actual}")
+    }
+}
+
+def requireNoUnexpandedPlaceholders = { String label, String entry, String text ->
+    if (text.contains('${')) {
+        throw new GradleException("${label} metadata ${entry} contains an unexpanded Gradle placeholder")
+    }
+}
+
+def verifyFabricMetadata = { File jarFile ->
+    def label = "Fabric release jar"
+    def metadataText = readJarEntryText(label, jarFile, "fabric.mod.json")
+    requireNoUnexpandedPlaceholders(label, "fabric.mod.json", metadataText)
+    def metadata = new groovy.json.JsonSlurper().parseText(metadataText)
+    requireMetadataValue(label, "schemaVersion", metadata.schemaVersion, 1)
+    requireMetadataValue(label, "id", metadata.id, rootProject.mod_id)
+    requireMetadataValue(label, "version", metadata.version, rootProject.mod_version)
+    requireMetadataValue(label, "name", metadata.name, "EndTerraForged")
+    requireMetadataValue(label, "license", metadata.license, "LGPL-3.0-or-later")
+    requireMetadataValue(label, "environment", metadata.environment, "*")
+    requireMetadataListContains(label, "authors", metadata.authors, "Knowledge-book-QwQ")
+    requireMetadataValue(label, "contact.repo", metadata.contact.repo,
+            "https://github.com/Knowledge-book-QwQ/EndTerraForged")
+    requireMetadataValue(label, "contact.issues", metadata.contact.issues,
+            "https://github.com/Knowledge-book-QwQ/EndTerraForged/issues")
+    requireMetadataListContains(label, "entrypoints.main", metadata.entrypoints.main,
+            "endterraforged.fabric.EndTerraForgedFabric")
+    requireMetadataListContains(label, "mixins", metadata.mixins, "endterraforged-common.mixins.json")
+    requireMetadataListContains(label, "mixins", metadata.mixins, "endterraforged-fabric.mixins.json")
+    requireMetadataValue(label, "depends.fabricloader", metadata.depends.fabricloader,
+            ">=${rootProject.fabric_loader_version}".toString())
+    requireMetadataValue(label, "depends.fabric", metadata.depends.fabric,
+            ">=${rootProject.fabric_api_version}".toString())
+    requireMetadataValue(label, "depends.minecraft", metadata.depends.minecraft,
+            ">=${rootProject.minecraft_version}".toString())
+    logger.lifecycle("Verified Fabric metadata: ${metadata.id} ${metadata.version}")
+}
+
+def verifyNeoForgeMetadata = { File jarFile ->
+    def label = "NeoForge release jar"
+    def metadata = readJarEntryText(label, jarFile, "META-INF/neoforge.mods.toml")
+    requireNoUnexpandedPlaceholders(label, "META-INF/neoforge.mods.toml", metadata)
+    def expected = [
+            "modLoader=\"javafml\"",
+            "loaderVersion=\"[4,)\"",
+            "license=\"LGPL-3.0-or-later\"",
+            "config = \"endterraforged-common.mixins.json\"",
+            "config = \"endterraforged-neoforge.mixins.json\"",
+            "modId=\"${rootProject.mod_id}\"".toString(),
+            "displayName=\"EndTerraForged\"",
+            "version=\"${rootProject.mod_version}\"".toString(),
+            "authors=\"Knowledge-book-QwQ\"",
+            "displayURL=\"https://github.com/Knowledge-book-QwQ/EndTerraForged/\"",
+            "issueTrackerURL=\"https://github.com/Knowledge-book-QwQ/EndTerraForged/issues\"",
+            "description=\"An End-dimension terrain worldgen mod inspired by ReTerraForged.\"",
+            "modId=\"neoforge\"",
+            "versionRange=\"[${rootProject.neoforge_version},)\"".toString(),
+            "modId = \"minecraft\"",
+            "versionRange = \"[${rootProject.minecraft_version},)\"".toString()
+    ]
+    expected.each { token ->
+        if (!metadata.contains(token)) {
+            throw new GradleException("${label} metadata is missing expected token: ${token}")
+        }
+    }
+    logger.lifecycle("Verified NeoForge metadata: ${rootProject.mod_id} ${rootProject.mod_version}")
+}
+
+def gitOutputLines = { List<String> args ->
+    def output = new ByteArrayOutputStream()
+    exec {
+        commandLine(["git"] + args)
+        standardOutput = output
+    }
+    return output.toString("UTF-8").readLines().findAll { line -> !line.isBlank() }
+}
+
+def pathCategory = { String path ->
+    if (path.startsWith("common/src/main/java/")) return "common main Java"
+    if (path.startsWith("common/src/main/resources/")) return "common resources"
+    if (path.startsWith("common/src/test/java/")) return "common tests"
+    if (path.startsWith("fabric/src/main/")) return "Fabric source/resources"
+    if (path.startsWith("neoforge/src/main/")) return "NeoForge source/resources"
+    if (path.startsWith("docs/")) return "docs"
+    if (path.endsWith(".md")) return "root docs"
+    if (path.endsWith(".gradle") || path == "gradle.properties" || path == "settings.gradle") return "Gradle config"
+    return "other"
+}
+
+def logGroupedPaths = { String title, List<String> paths ->
+    logger.lifecycle("${title}: ${paths.size()}")
+    paths.groupBy(pathCategory).sort { left, right -> left.key <=> right.key }.each { category, grouped ->
+        logger.lifecycle("  ${category}: ${grouped.size()}")
+        grouped.take(12).each { path -> logger.lifecycle("    ${path}") }
+        if (grouped.size() > 12) {
+            logger.lifecycle("    ... ${grouped.size() - 12} more")
+        }
+    }
+}
+
+tasks.register("reportRepositoryHygiene") {
+    group = "verification"
+    description = "Reports release hygiene risks from git without failing the build."
+
+    doLast {
+        def trackedIgnored = gitOutputLines(["ls-files", "-ci", "--exclude-standard"])
+        def untracked = gitOutputLines(["ls-files", "--others", "--exclude-standard"])
+        def changed = gitOutputLines(["status", "--short", "--untracked-files=no"])
+
+        logGroupedPaths("Tracked files matched by .gitignore", trackedIgnored)
+        logGroupedPaths("Untracked release-relevant files", untracked)
+        logGroupedPaths("Tracked working-tree changes", changed.collect { line ->
+            line.length() > 3 ? line.substring(3) : line
+        })
+
+        logger.lifecycle("Repository hygiene report complete. Run :verifyRepositoryHygiene before staging a release.")
+    }
+}
+
+tasks.register("verifyRepositoryHygiene") {
+    group = "verification"
+    description = "Fails if tracked ignored files or untracked release-relevant files remain before a release commit."
+
+    doLast {
+        def trackedIgnored = gitOutputLines(["ls-files", "-ci", "--exclude-standard"])
+        def untracked = gitOutputLines(["ls-files", "--others", "--exclude-standard"])
+        def failures = []
+
+        if (!trackedIgnored.isEmpty()) {
+            failures.add("Tracked files are now matched by .gitignore and must be removed from the index:\n"
+                    + trackedIgnored.join("\n"))
+        }
+        if (!untracked.isEmpty()) {
+            failures.add("Untracked release-relevant files remain. Stage, intentionally ignore, or remove them:\n"
+                    + untracked.take(80).join("\n")
+                    + (untracked.size() > 80 ? "\n... ${untracked.size() - 80} more" : ""))
+        }
+        if (!failures.isEmpty()) {
+            throw new GradleException(failures.join("\n\n"))
+        }
+
+        logger.lifecycle("Repository hygiene verified: no tracked ignored files or untracked release-relevant files")
+    }
+}
+
+tasks.register("verifyReleaseArtifacts") {
+    group = "verification"
+    description = "Builds and verifies common transform jars plus Fabric/NeoForge release jars contain required classes and resources."
+
+    dependsOn ":common:transformProductionFabric", ":common:transformProductionNeoForge",
+            ":fabric:remapJar", ":neoforge:remapJar"
+
+    doLast {
+        verifyCommonResourceManifest()
+
+        def criticalCommonJarEntries = criticalCommonEntries + criticalCommonResourceEntries
+        def criticalCommonTransformEntries = criticalCommonJarEntries + commonTransformOnlyEntries
+        verifyReleaseJar("common Fabric transform jar", commonTransformJar("Fabric"), criticalCommonTransformEntries)
+        verifyReleaseJar("common NeoForge transform jar", commonTransformJar("NeoForge"), criticalCommonTransformEntries)
+        verifyReleaseJar("Fabric release jar", project(":fabric").tasks.named("remapJar").get().archiveFile.get().asFile, [
+                "fabric.mod.json",
+                "endterraforged-fabric.mixins.json",
+                "endterraforged/fabric/EndTerraForgedFabric.class"
+        ] + criticalCommonJarEntries + fabricCommonResourceEntries)
+        def fabricReleaseJar = project(":fabric").tasks.named("remapJar").get().archiveFile.get().asFile
+        def neoForgeReleaseJar = project(":neoforge").tasks.named("remapJar").get().archiveFile.get().asFile
+        verifyReleaseJar("NeoForge release jar", neoForgeReleaseJar, [
+                "META-INF/neoforge.mods.toml",
+                "endterraforged-neoforge.mixins.json",
+                "endterraforged/neoforge/EndTerraForgedNeoForge.class",
+                "endterraforged/neoforge/client/EndTerraForgedClientScreens.class",
+                "endterraforged/neoforge/client/ExistingWorldPresetEditorLauncher.class",
+                "endterraforged/neoforge/client/LdLib2ActionBar.class"
+        ] + criticalCommonJarEntries)
+        verifyFabricMetadata(fabricReleaseJar)
+        verifyNeoForgeMetadata(neoForgeReleaseJar)
     }
 }

@@ -9,7 +9,9 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.util.HashSet;
+import java.util.Locale;
 import java.util.Set;
+import java.util.TreeSet;
 
 import org.junit.jupiter.api.Test;
 
@@ -17,6 +19,15 @@ import com.google.gson.Gson;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+
+import endterraforged.world.config.EndPreset;
+import endterraforged.world.config.EndPresetLibrary;
+import endterraforged.world.config.SeaMode;
+import endterraforged.world.config.TerrainShape;
+import endterraforged.world.config.TopologyMode;
+import endterraforged.world.preview.CaveSlicePreviewSettings;
+import endterraforged.world.preview.TerrainPreviewMode;
+import endterraforged.world.preview.TerrainPreviewScale;
 
 /**
  * Defensive tests for the mod's datapack JSON resources — the files that
@@ -65,6 +76,9 @@ import com.google.gson.JsonObject;
  *   <li>Every {@code endterraforged:*} reference in the JSON resolves to
  *       a name that the mod actually registers (catches typos and
  *       registration/reference drift).</li>
+ *   <li>English and Simplified Chinese language files expose the same key
+ *       set, so editor UI work cannot ship with one locale silently missing
+ *       labels or error messages.</li>
  * </ul>
  *
  * <p><b>Why these are structural tests, not DFU round-trips.</b> A full DFU
@@ -76,6 +90,14 @@ import com.google.gson.JsonObject;
 class DatapackResourceValidationTest {
 
     private static final Gson GSON = new Gson();
+    private static final String[] END_DATAPACK_JSONS = {
+            "/data/minecraft/dimension/the_end.json",
+            "/data/minecraft/dimension_type/the_end.json",
+            "/data/minecraft/worldgen/noise_settings/the_end.json",
+            "/data/endterraforged/presets/dimension/cold_end.json",
+            "/data/endterraforged/presets/dimension/temperate_end.json",
+            "/data/endterraforged/presets/dimension/hot_end.json"
+    };
 
     /**
      * The End dimension_type's {@code monster_spawn_light_level} field
@@ -183,6 +205,67 @@ class DatapackResourceValidationTest {
                         + "channels — matches vanilla's End noise_settings).");
     }
 
+    @Test
+    void finalDensityUsesMaxUnionWithoutAddOrClamp() throws Exception {
+        JsonObject settings = loadJsonResource(
+                "/data/minecraft/worldgen/noise_settings/the_end.json");
+        JsonObject finalDensity = settings.getAsJsonObject("noise_router")
+                .getAsJsonObject("final_density");
+
+        assertEquals("minecraft:max", finalDensity.get("type").getAsString(),
+                "ETF's 0/1 terrain density and 0..1 floating-island field must use max; "
+                        + "vanilla add fillArray allocates a second array and requires a clamp");
+        assertEquals("endterraforged:end_density",
+                finalDensity.getAsJsonObject("argument1").get("type").getAsString());
+        assertEquals("endterraforged:floating_islands",
+                finalDensity.getAsJsonObject("argument2").get("type").getAsString());
+    }
+
+    /**
+     * The default preset and bundled End data must describe the same vertical
+     * envelope. A preset-only height change looks valid in the editor but
+     * cannot resize a Minecraft dimension after registry loading.
+     */
+    @Test
+    void standardWorldEnvelopeMatchesPresetAndBothDatapackEntries() throws Exception {
+        JsonObject dimensionType = loadJsonResource("/data/minecraft/dimension_type/the_end.json");
+        JsonObject noiseSettings = loadJsonResource("/data/minecraft/worldgen/noise_settings/the_end.json");
+        JsonObject noise = noiseSettings.getAsJsonObject("noise");
+        EndPreset defaults = EndPreset.defaults();
+
+        assertEquals(defaults.minY(), dimensionType.get("min_y").getAsInt());
+        assertEquals(defaults.worldHeight(), dimensionType.get("height").getAsInt());
+        assertEquals(defaults.minY(), noise.get("min_y").getAsInt());
+        assertEquals(defaults.worldHeight(), noise.get("height").getAsInt());
+    }
+
+    /**
+     * Sea-enabled profiles must flood with water, not lava and not air.
+     *
+     * <p>The ROADMAP defines the End sea as an ocean/waterline concept:
+     * {@code SeaMode.WITH_FLOOR} is a sea with a seabed, and
+     * {@code SeaMode.NO_FLOOR} is a sea over void. Vanilla's
+     * {@code noise_router.lava} field is still present because the 1.21.1
+     * {@code NoiseRouter} schema requires that channel, but the actual fluid
+     * used by the disabled aquifer picker comes from {@code default_fluid}.
+     * Keeping this pinned to water prevents the sea from regressing into a
+     * lava/magma ocean or an empty air gap.</p>
+     */
+    @Test
+    void endSeaUsesWaterAsDefaultFluid() throws Exception {
+        JsonObject settings = loadJsonResource(
+                "/data/minecraft/worldgen/noise_settings/the_end.json");
+        assertTrue(settings.has("default_fluid"),
+                "noise_settings/the_end.json must declare default_fluid so "
+                        + "SeaMode.WITH_FLOOR/NO_FLOOR have a concrete ocean fluid.");
+        JsonObject fluid = settings.getAsJsonObject("default_fluid");
+        assertEquals("minecraft:water", fluid.get("Name").getAsString(),
+                "EndTerraForged's sea modes are ocean/water modes per ROADMAP. "
+                        + "Do not use minecraft:lava/magma here; the vanilla "
+                        + "noise_router.lava field is only a required zeroed "
+                        + "density channel, not the ocean fluid.");
+    }
+
     /**
      * Every {@code endterraforged:*} reference in the mod's datapack JSON
      * must resolve to a name that the mod actually registers. This catches
@@ -210,12 +293,7 @@ class DatapackResourceValidationTest {
                 "endterraforged:climate_filter"
         );
         Set<String> referenced = new HashSet<>();
-        // The three End datapack JSONs that reference mod-registered names.
-        for (String path : new String[] {
-                "/data/minecraft/dimension/the_end.json",
-                "/data/minecraft/dimension_type/the_end.json",
-                "/data/minecraft/worldgen/noise_settings/the_end.json"
-        }) {
+        for (String path : END_DATAPACK_JSONS) {
             JsonObject root = loadJsonResource(path);
             collectEndTerraForgedRefs(root, referenced);
         }
@@ -255,6 +333,89 @@ class DatapackResourceValidationTest {
                         + "mod's noise_router override).");
     }
 
+    /**
+     * The preset editor has grown into a large surface area with many
+     * parameter labels, preview modes and visible error states. Keeping the
+     * locale key sets identical makes missing translation keys fail in tests
+     * instead of leaking as raw translation ids in one language.
+     */
+    @Test
+    void languageFilesExposeSameKeys() throws Exception {
+        JsonObject english = loadJsonResource("/assets/endterraforged/lang/en_us.json");
+        JsonObject chinese = loadJsonResource("/assets/endterraforged/lang/zh_cn.json");
+
+        Set<String> englishKeys = english.keySet();
+        Set<String> chineseKeys = chinese.keySet();
+
+        Set<String> missingInChinese = new TreeSet<>(englishKeys);
+        missingInChinese.removeAll(chineseKeys);
+        Set<String> missingInEnglish = new TreeSet<>(chineseKeys);
+        missingInEnglish.removeAll(englishKeys);
+
+        assertTrue(missingInChinese.isEmpty(),
+                "zh_cn.json is missing language keys present in en_us.json: "
+                        + missingInChinese);
+        assertTrue(missingInEnglish.isEmpty(),
+                "en_us.json is missing language keys present in zh_cn.json: "
+                        + missingInEnglish);
+    }
+
+    /**
+     * Some editor controls build translation keys from enum or status names.
+     * This test ties those dynamic key patterns to the actual locale files so
+     * adding a new enum constant cannot silently render as a raw key in-game.
+     */
+    @Test
+    void languageFilesContainKnownDynamicKeys() throws Exception {
+        JsonObject english = loadJsonResource("/assets/endterraforged/lang/en_us.json");
+        JsonObject chinese = loadJsonResource("/assets/endterraforged/lang/zh_cn.json");
+
+        for (TerrainPreviewMode mode : TerrainPreviewMode.values()) {
+            assertLanguageKeyExists(english, chinese,
+                    "endterraforged.gui.preview.mode." + lower(mode.name()));
+        }
+        for (TerrainPreviewScale scale : TerrainPreviewScale.values()) {
+            assertLanguageKeyExists(english, chinese,
+                    "endterraforged.gui.preview.scale." + lower(scale.name()));
+        }
+        for (TerrainShape shape : TerrainShape.values()) {
+            assertLanguageKeyExists(english, chinese,
+                    "endterraforged.gui.terrain.shape." + lower(shape.name()));
+        }
+        for (SeaMode mode : SeaMode.values()) {
+            assertLanguageKeyExists(english, chinese,
+                    "endterraforged.gui.sea_mode." + lower(mode.name()));
+        }
+        for (TopologyMode mode : TopologyMode.values()) {
+            assertLanguageKeyExists(english, chinese,
+                    "endterraforged.gui.topology_mode." + lower(mode.name()));
+        }
+        for (CaveSlicePreviewSettings.Axis axis : CaveSlicePreviewSettings.Axis.values()) {
+            assertLanguageKeyExists(english, chinese,
+                    "endterraforged.gui.cave_slice.axis." + lower(axis.name()));
+        }
+        for (EndPresetLibrary.SaveResult result : EndPresetLibrary.SaveResult.values()) {
+            assertLanguageKeyExists(english, chinese,
+                    "endterraforged.gui.preset_library.save." + lower(result.name()));
+        }
+        for (EndPresetLibrary.LoadStatus status : EndPresetLibrary.LoadStatus.values()) {
+            assertLanguageKeyExists(english, chinese,
+                    "endterraforged.gui.preset_library.load." + lower(status.name()));
+        }
+        for (EndPresetLibrary.DeleteResult result : EndPresetLibrary.DeleteResult.values()) {
+            assertLanguageKeyExists(english, chinese,
+                    "endterraforged.gui.preset_library.delete." + lower(result.name()));
+        }
+        for (EndPresetLibrary.ExportResult result : EndPresetLibrary.ExportResult.values()) {
+            assertLanguageKeyExists(english, chinese,
+                    "endterraforged.gui.preset_library.export." + lower(result.name()));
+        }
+        for (EndPresetLibrary.ImportStatus status : EndPresetLibrary.ImportStatus.values()) {
+            assertLanguageKeyExists(english, chinese,
+                    "endterraforged.gui.preset_library.import." + lower(status.name()));
+        }
+    }
+
     // ------------------------------------------------------------------
     //  Helpers
     // ------------------------------------------------------------------
@@ -269,6 +430,15 @@ class DatapackResourceValidationTest {
             return GSON.fromJson(new InputStreamReader(in, StandardCharsets.UTF_8),
                     JsonObject.class);
         }
+    }
+
+    private static void assertLanguageKeyExists(JsonObject english, JsonObject chinese, String key) {
+        assertTrue(english.has(key), "en_us.json is missing dynamic language key: " + key);
+        assertTrue(chinese.has(key), "zh_cn.json is missing dynamic language key: " + key);
+    }
+
+    private static String lower(String value) {
+        return value.toLowerCase(Locale.ROOT);
     }
 
     /**

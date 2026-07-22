@@ -15,30 +15,32 @@ package endterraforged.world.config;
  * <p>This is one of the three orthogonal switches (with {@link TopologyMode}
  * and {@code FloatingIslands}) that together describe the dimension's shape.
  * It controls whether {@code seaLevel} participates in height/level math at
- * all, and whether the region below sea level is solid ground or void.</p>
+ * all, how landmass columns treat the region below sea level, and whether
+ * exterior columns receive a seabed. A finite
+ * {@link LandmassVolumeMode#FLOATING_SHELF} still owns each continent's
+ * underside; WITH_FLOOR adds a separate floor only outside those landmasses.</p>
  *
  * <p><b>Thread safety:</b> enum, inherently immutable and safe to share.</p>
  */
 public enum SeaMode {
     /**
      * No sea. {@code seaLevel} is ignored; terrain below the island baseline is
-     * void. Erosion is anchored to the island baseline instead of a waterline.
-     * This is the most "vanilla-End-like" mode.
+     * void when {@link LandmassVolumeMode#LEGACY_COLUMN} is active. Erosion is
+     * anchored to the island baseline instead of a waterline. This is the most
+     * "vanilla-End-like" mode.
      */
     NONE,
 
     /**
-     * Sea with a continuous floor. Sea level is honoured and the ground
-     * extends below it as a seabed — the closest analogue to RTF's overworld
-     * behaviour, transplanted into the End.
+     * Sea with a continuous exterior floor. Sea level is honoured and a
+     * low-frequency seabed closes open-ocean columns below it.
      */
     WITH_FLOOR,
 
     /**
      * Sea with no floor. Sea level is honoured as a surface, but anything below
-     * it is void; land exists only above the waterline, so the result is
-     * floating islands suspended over an endless sea. The most spectacular /
-     * surreal combination.
+     * it remains negative density; the exterior fluid picker fills that space
+     * with water while finite shelves keep their configured underside.
      */
     NO_FLOOR;
 
@@ -53,14 +55,11 @@ public enum SeaMode {
     }
 
     /**
-     * {@code true} when the dimension has a continuous solid floor below the
-     * reference surface (i.e. a seabed). {@code WITH_FLOOR} only; {@code NONE}
-     * and {@code NO_FLOOR} both leave void below the surface — {@code NONE}
-     * because islands float over nothing, {@code NO_FLOOR} because the sea
-     * has no bed.
+     * {@code true} when the dimension has a continuous solid exterior seabed.
+     * {@code WITH_FLOOR} only; {@code NONE} and {@code NO_FLOOR} leave exterior
+     * density empty below the surface.
      *
-     * <p>This is the single switch {@code EndDensity} uses to decide whether
-     * to keep filling solid below the surface or to carve void.</p>
+     * <p>Finite landmasses retain their own underside independently.</p>
      */
     public boolean hasFloor() {
         return this == WITH_FLOOR;

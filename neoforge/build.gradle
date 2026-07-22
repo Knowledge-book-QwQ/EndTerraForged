@@ -26,11 +26,28 @@ configurations {
 }
 
 repositories {
-    maven { url "https://maven.neoforged.net/releases/" }
+    maven {
+        url "https://maven.neoforged.net/releases/"
+        content {
+            includeGroupByRegex "net\\.neoforged.*"
+            includeGroup "cpw.mods"
+            includeGroup "io.github.llamalad7"
+        }
+    }
+    maven {
+        url "https://maven.firstdark.dev/snapshots"
+        content {
+            includeGroup "com.lowdragmc.ldlib2"
+        }
+    }
 }
 
 dependencies {
     neoForge "net.neoforged:neoforge:$rootProject.neoforge_version"
+    modImplementation "com.lowdragmc.ldlib2:ldlib2-neoforge-${rootProject.minecraft_version}:${rootProject.ldlib2_version}:all"
+    forgeRuntimeLibrary "dev.vfyjxf:taffy:1.1.4"
+    forgeRuntimeLibrary "org.appliedenergistics.yoga:yoga:1.0.0"
+    forgeRuntimeLibrary "org.jetbrains.kotlin:kotlin-stdlib:2.1.20"
     common(project(path: ":common", configuration: "namedElements")) { transitive false }
     shadowCommon(project(path: ":common", configuration: "transformProductionNeoForge")) { transitive false }
 }
@@ -38,18 +55,18 @@ dependencies {
 evaluationDependsOn(':common')
 
 processResources {
-
     from project(":common").file("src/main/resources")
 
-	inputs.property "neoforgeVersion", "21.1.201"
+    inputs.property "neoforgeVersion", rootProject.neoforge_version
+    inputs.property "minecraftVersion", rootProject.minecraft_version
     inputs.property "version", project.version
 
-    // Prevent duplicate file errors if files exist in multiple places
-    duplicatesStrategy = DuplicatesStrategy.INCLUDE
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
 
     filesMatching("META-INF/neoforge.mods.toml") {
-        expand "version": project.version
-		expand "neoforgeVersion": "21.1.201"
+        expand "version": project.version,
+                "neoforgeVersion": rootProject.neoforge_version,
+                "minecraftVersion": rootProject.minecraft_version
     }
 }
 
@@ -70,10 +87,6 @@ remapJar {
 
 jar {
     archiveClassifier.set("dev")
-}
-
-processResources {
-    duplicatesStrategy "exclude"
 }
 
 sourcesJar {

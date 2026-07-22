@@ -1,5 +1,8 @@
 # Checklist — 末地气候 Biome 分层
 
+> 文档状态：已完成的历史验收清单，不作为当前阶段门禁。
+> 当前验收定义见 [`../../../GOAL.md`](../../../GOAL.md)。
+
 ## 数据层（Task 2）
 - [x] `BiomeSlot` record 存在：`Holder<Biome> base`（nullable）+ `List<BiomeVariant> variants`，compact constructor 用 `List.copyOf` 防御性拷贝（unmodifiable + null-hostile）
 - [x] `BiomeSlot.hasVariants()` 返回 `!variants.isEmpty()`

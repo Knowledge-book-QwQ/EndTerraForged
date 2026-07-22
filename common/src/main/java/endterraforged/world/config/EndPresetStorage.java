@@ -22,6 +22,8 @@ import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Consumer;
@@ -102,6 +104,29 @@ public final class EndPresetStorage {
      * is left behind after a successful save.
      */
     public static final String TEMP_SUFFIX = ".tmp";
+
+    /**
+     * Directory name used for user-managed preset library files. The single
+     * {@link #FILE_NAME} file remains the active world preset; this directory
+     * stores named copies for import/export style workflows in the editor.
+     */
+    public static final String LIBRARY_DIR_NAME = "endterraforged_presets";
+
+    /**
+     * Directory used to exchange preset JSON files with the player outside the
+     * named per-world library.
+     */
+    public static final String EXCHANGE_DIR_NAME = "endterraforged_exports";
+
+    /**
+     * Extension used by named preset files. Names returned by
+     * {@link #listNamed(Path)} and accepted by
+     * {@link #saveNamed(Path, String, EndPreset)} are logical preset names
+     * without this extension.
+     */
+    public static final String JSON_SUFFIX = ".json";
+
+    private static final String FALLBACK_PRESET_NAME = "preset";
 
     /**
      * Pretty-printing Gson instance — preset files are written with
@@ -209,7 +234,6 @@ public final class EndPresetStorage {
      *         {@code errorHandler} is {@code null}
      */
     public static Optional<EndPreset> load(Path worldDir, Consumer<String> errorHandler) {
-        Objects.requireNonNull(worldDir, "worldDir");
         Objects.requireNonNull(errorHandler, "errorHandler");
         Path file = presetFile(worldDir);
         if (!Files.isRegularFile(file)) {
@@ -220,38 +244,7 @@ public final class EndPresetStorage {
             // world load.
             return Optional.empty();
         }
-        String content;
-        try {
-            content = Files.readString(file);
-        } catch (IOException e) {
-            // File exists but is unreadable (permissions, disk error) —
-            // surface to the error handler so the server admin can see
-            // why their preset isn't being applied.
-            errorHandler.accept("Preset file could not be read: " + e.getMessage());
-            return Optional.empty();
-        }
-        JsonElement json;
-        try {
-            json = JsonParser.parseString(content);
-        } catch (JsonParseException e) {
-            // Garbage that is not valid JSON — surface to the error
-            // handler so the admin can find the syntax error.
-            errorHandler.accept("Preset file is not valid JSON: " + e.getMessage());
-            return Optional.empty();
-        }
-        DataResult<EndPreset> result = EndPreset.CODEC.parse(JsonOps.INSTANCE, json);
-        Optional<EndPreset> decoded = result.result();
-        if (decoded.isEmpty()) {
-            // JSON parsed cleanly but failed DFU decode (wrong shape,
-            // unknown enum name, or — post stage 6.3 — a validator
-            // constraint violation). Surface the DataResult.error message
-            // so the admin knows which field is wrong.
-            String msg = result.error()
-                    .map(e -> e.message())
-                    .orElse("unknown decode error");
-            errorHandler.accept("Preset file failed to decode: " + msg);
-        }
-        return decoded;
+        return readPresetFile(file, errorHandler);
     }
 
     /**
@@ -288,48 +281,8 @@ public final class EndPresetStorage {
      * @throws NullPointerException if {@code worldDir} or {@code preset} is {@code null}
      */
     public static boolean save(Path worldDir, EndPreset preset) {
-        Objects.requireNonNull(worldDir, "worldDir");
         Objects.requireNonNull(preset, "preset");
-        Path file = presetFile(worldDir);
-        Path temp = file.resolveSibling(FILE_NAME + TEMP_SUFFIX);
-
-        // Encode first — if encoding fails we don't want to touch the disk.
-        DataResult<JsonElement> encoded = EndPreset.CODEC.encodeStart(JsonOps.INSTANCE, preset);
-        Optional<JsonElement> jsonOpt = encoded.result();
-        if (jsonOpt.isEmpty()) {
-            return false;
-        }
-        String content = GSON.toJson(jsonOpt.get());
-
-        try {
-            // Write to temp file first so a crash mid-write doesn't
-            // corrupt the existing preset file.
-            Files.writeString(temp, content);
-            try {
-                Files.move(temp, file,
-                        StandardCopyOption.REPLACE_EXISTING,
-                        StandardCopyOption.ATOMIC_MOVE);
-            } catch (AtomicMoveNotSupportedException e) {
-                // Filesystem doesn't support atomic move (some network
-                // mounts, some Windows configurations). Fall back to a
-                // non-atomic replace — still safer than writing in place
-                // because the temp file is fully written before the rename.
-                Files.move(temp, file, StandardCopyOption.REPLACE_EXISTING);
-            }
-            return true;
-        } catch (IOException e) {
-            // Best-effort cleanup of the temp file before returning. If
-            // cleanup itself fails there's nothing useful we can do —
-            // leave the temp file for the next save (which will overwrite
-            // it) or for an admin to find.
-            try {
-                Files.deleteIfExists(temp);
-            } catch (IOException ignored) {
-                // Cleanup failure is non-fatal; the actual save failure
-                // is what we report.
-            }
-            return false;
-        }
+        return writePresetFile(presetFile(worldDir), preset);
     }
 
     /**
@@ -348,13 +301,163 @@ public final class EndPresetStorage {
      * @throws NullPointerException if {@code worldDir} is {@code null}
      */
     public static boolean delete(Path worldDir) {
-        Objects.requireNonNull(worldDir, "worldDir");
-        Path file = presetFile(worldDir);
-        try {
-            return Files.deleteIfExists(file);
-        } catch (IOException e) {
-            return false;
+        return deleteFile(presetFile(worldDir));
+    }
+
+    /**
+     * Imports a preset from an arbitrary JSON file. This is the storage-level
+     * hook future GUI file-pickers can use without duplicating DFU decode logic.
+     */
+    public static Optional<EndPreset> importFrom(Path file) {
+        return importFrom(file, msg -> {});
+    }
+
+    /**
+     * Imports a preset from an arbitrary JSON file, reporting decode/read
+     * errors through the supplied handler.
+     */
+    public static Optional<EndPreset> importFrom(Path file, Consumer<String> errorHandler) {
+        Objects.requireNonNull(file, "file");
+        Objects.requireNonNull(errorHandler, "errorHandler");
+        if (!Files.isRegularFile(file)) {
+            return Optional.empty();
         }
+        return readPresetFile(file, errorHandler);
+    }
+
+    /**
+     * Exports a preset to an arbitrary JSON file using the same pretty-printed,
+     * temp-file-then-rename write path as the active world preset.
+     */
+    public static boolean exportTo(Path file, EndPreset preset) {
+        Objects.requireNonNull(file, "file");
+        Objects.requireNonNull(preset, "preset");
+        return writePresetFile(file, preset);
+    }
+
+    /**
+     * Saves a named preset copy into {@code <worldDir>/endterraforged_presets}.
+     * The active world preset is unchanged until the caller explicitly saves it
+     * through {@link #save(Path, EndPreset)}.
+     */
+    public static boolean saveNamed(Path worldDir, String name, EndPreset preset) {
+        Objects.requireNonNull(preset, "preset");
+        return exportTo(namedPresetFile(worldDir, name), preset);
+    }
+
+    /** Loads a named preset copy from the per-world preset library. */
+    public static Optional<EndPreset> loadNamed(Path worldDir, String name) {
+        return loadNamed(worldDir, name, msg -> {});
+    }
+
+    /** Loads a named preset copy and reports corrupt-library-file errors. */
+    public static Optional<EndPreset> loadNamed(
+            Path worldDir, String name, Consumer<String> errorHandler) {
+        Objects.requireNonNull(errorHandler, "errorHandler");
+        return importFrom(namedPresetFile(worldDir, name), errorHandler);
+    }
+
+    /** Deletes a named preset copy from the per-world preset library. */
+    public static boolean deleteNamed(Path worldDir, String name) {
+        return deleteFile(namedPresetFile(worldDir, name));
+    }
+
+    /**
+     * Lists logical preset names in the per-world preset library. Corrupt JSON
+     * files are still listed so the UI can show them and surface a decode error
+     * when selected.
+     */
+    public static List<String> listNamed(Path worldDir) {
+        Path directory = presetLibraryDir(worldDir);
+        if (!Files.isDirectory(directory)) {
+            return List.of();
+        }
+        try (var stream = Files.list(directory)) {
+            return stream
+                    .filter(Files::isRegularFile)
+                    .map(path -> path.getFileName().toString())
+                    .filter(EndPresetStorage::isPresetJsonFile)
+                    .map(EndPresetStorage::stripJsonSuffix)
+                    .sorted()
+                    .toList();
+        } catch (IOException e) {
+            return List.of();
+        }
+    }
+
+    /**
+     * Converts user-facing names into safe logical file stems. The returned
+     * value never contains a path separator, never includes {@link #JSON_SUFFIX},
+     * and never resolves to a Windows device name.
+     */
+    public static String sanitizePresetName(String name) {
+        return normalizePresetName(name).orElse(FALLBACK_PRESET_NAME);
+    }
+
+    /**
+     * Normalizes a user-facing library name without falling back to a generic
+     * file stem. GUI workflows should use this before saving named presets so
+     * blank or separator-only names can be reported to the user instead of
+     * silently overwriting {@code preset.json}.
+     */
+    public static Optional<String> normalizePresetName(String name) {
+        Objects.requireNonNull(name, "name");
+        String sanitized = sanitizePresetNameStem(stripJsonSuffix(name.trim()));
+        if (sanitized.isBlank()) {
+            return Optional.empty();
+        }
+        if (isReservedWindowsName(sanitized)) {
+            sanitized = sanitized + "_preset";
+        }
+        return Optional.of(sanitized);
+    }
+
+    private static String sanitizePresetNameStem(String source) {
+        StringBuilder builder = new StringBuilder(source.length());
+        boolean pendingSeparator = false;
+        for (int i = 0; i < source.length();) {
+            int codePoint = source.codePointAt(i);
+            i += Character.charCount(codePoint);
+            if (isAllowedPresetNameCodePoint(codePoint)) {
+                if (pendingSeparator && builder.length() > 0
+                        && builder.charAt(builder.length() - 1) != '_') {
+                    builder.append('_');
+                }
+                builder.appendCodePoint(Character.toLowerCase(codePoint));
+                pendingSeparator = false;
+            } else {
+                pendingSeparator = true;
+            }
+        }
+        return trimTrailingDotsAndUnderscores(builder.toString());
+    }
+
+    /**
+     * Returns the directory used by named preset library files. Does not create
+     * the directory; save/export methods create parent directories when needed.
+     */
+    public static Path presetLibraryDir(Path worldDir) {
+        Objects.requireNonNull(worldDir, "worldDir");
+        return worldDir.resolve(LIBRARY_DIR_NAME);
+    }
+
+    /** Returns the JSON path for a named preset library entry. */
+    public static Path namedPresetFile(Path worldDir, String name) {
+        return presetLibraryDir(worldDir).resolve(sanitizePresetName(name) + JSON_SUFFIX);
+    }
+
+    /**
+     * Returns the directory used for manual preset import and export. Files in
+     * this directory are never treated as active or named-library presets.
+     */
+    public static Path presetExchangeDir(Path worldDir) {
+        Objects.requireNonNull(worldDir, "worldDir");
+        return worldDir.resolve(EXCHANGE_DIR_NAME);
+    }
+
+    /** Returns the JSON path for a user-managed import or export file. */
+    public static Path exchangePresetFile(Path worldDir, String name) {
+        return presetExchangeDir(worldDir).resolve(sanitizePresetName(name) + JSON_SUFFIX);
     }
 
     /**
@@ -374,5 +477,122 @@ public final class EndPresetStorage {
     public static Path presetFile(Path worldDir) {
         Objects.requireNonNull(worldDir, "worldDir");
         return worldDir.resolve(FILE_NAME);
+    }
+
+    private static Optional<EndPreset> readPresetFile(
+            Path file, Consumer<String> errorHandler) {
+        String content;
+        try {
+            content = Files.readString(file);
+        } catch (IOException e) {
+            errorHandler.accept("Preset file could not be read: " + e.getMessage());
+            return Optional.empty();
+        }
+        JsonElement json;
+        try {
+            json = JsonParser.parseString(content);
+        } catch (JsonParseException e) {
+            errorHandler.accept("Preset file is not valid JSON: " + e.getMessage());
+            return Optional.empty();
+        }
+        DataResult<EndPreset> result = EndPreset.CODEC.parse(JsonOps.INSTANCE, json);
+        Optional<EndPreset> decoded = result.result();
+        if (decoded.isEmpty()) {
+            String msg = result.error()
+                    .map(e -> e.message())
+                    .orElse("unknown decode error");
+            errorHandler.accept("Preset file failed to decode: " + msg);
+        }
+        return decoded;
+    }
+
+    private static boolean writePresetFile(Path file, EndPreset preset) {
+        Path fileName = file.getFileName();
+        if (fileName == null) {
+            return false;
+        }
+        DataResult<JsonElement> encoded = EndPreset.CODEC.encodeStart(JsonOps.INSTANCE, preset);
+        Optional<JsonElement> jsonOpt = encoded.result();
+        if (jsonOpt.isEmpty()) {
+            return false;
+        }
+        String content = GSON.toJson(jsonOpt.get());
+        Path temp = file.resolveSibling(fileName + TEMP_SUFFIX);
+        try {
+            Path parent = file.getParent();
+            if (parent != null) {
+                Files.createDirectories(parent);
+            }
+            Files.writeString(temp, content);
+            try {
+                Files.move(temp, file,
+                        StandardCopyOption.REPLACE_EXISTING,
+                        StandardCopyOption.ATOMIC_MOVE);
+            } catch (AtomicMoveNotSupportedException e) {
+                Files.move(temp, file, StandardCopyOption.REPLACE_EXISTING);
+            }
+            return true;
+        } catch (IOException e) {
+            try {
+                Files.deleteIfExists(temp);
+            } catch (IOException ignored) {
+                // Cleanup is best effort; the false return reports the save failure.
+            }
+            return false;
+        }
+    }
+
+    private static boolean deleteFile(Path file) {
+        try {
+            return Files.deleteIfExists(file);
+        } catch (IOException e) {
+            return false;
+        }
+    }
+
+    private static boolean isPresetJsonFile(String fileName) {
+        return fileName.length() > JSON_SUFFIX.length()
+                && fileName.toLowerCase(Locale.ROOT).endsWith(JSON_SUFFIX);
+    }
+
+    private static String stripJsonSuffix(String name) {
+        if (name.toLowerCase(Locale.ROOT).endsWith(JSON_SUFFIX)) {
+            return name.substring(0, name.length() - JSON_SUFFIX.length());
+        }
+        return name;
+    }
+
+    private static boolean isAllowedPresetNameCodePoint(int codePoint) {
+        return Character.isLetterOrDigit(codePoint)
+                || codePoint == '-'
+                || codePoint == '_';
+    }
+
+    private static String trimTrailingDotsAndUnderscores(String value) {
+        int end = value.length();
+        while (end > 0) {
+            char c = value.charAt(end - 1);
+            if (c != '.' && c != '_') {
+                break;
+            }
+            end--;
+        }
+        return value.substring(0, end);
+    }
+
+    private static boolean isReservedWindowsName(String name) {
+        int dot = name.indexOf('.');
+        String stem = dot >= 0 ? name.substring(0, dot) : name;
+        String upper = stem.toUpperCase(Locale.ROOT);
+        if (upper.equals("CON") || upper.equals("PRN") || upper.equals("AUX")
+                || upper.equals("NUL")) {
+            return true;
+        }
+        if (upper.length() != 4) {
+            return false;
+        }
+        char index = upper.charAt(3);
+        return index >= '1' && index <= '9'
+                && (upper.startsWith("COM") || upper.startsWith("LPT"));
     }
 }

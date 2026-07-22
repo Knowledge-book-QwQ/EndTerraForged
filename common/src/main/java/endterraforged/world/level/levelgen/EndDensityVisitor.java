@@ -20,20 +20,20 @@ import endterraforged.world.heightmap.EndDensity;
  * {@link FloatingIslandsFunction.Bound} instance carrying the current
  * dimension's live field + world seed.
  *
- * <p><b>When this runs.</b> A stage-3.4 Mixin on {@code NoiseChunk}
- * construction (End dimension only) calls
- * {@code noiseRouter.mapAll(new EndDensityVisitor(...))}. Vanilla's
- * {@code mapAll} walks the entire density-function tree and calls
+ * <p><b>When this runs.</b> A Mixin on {@code NoiseChunk} construction
+ * (End dimension only) replaces the chunk visitor argument with an ETF-first
+ * composite visitor. Vanilla or another mod then invokes {@code mapAll}; it
+ * walks the entire density-function tree and calls
  * {@link #apply} on each node, so every placeholder — including those
- * nested inside {@code add}/{@code clamp}/{@code slide} wrappers if the
+ * nested inside {@code max}/{@code slide} and other wrappers if the
  * JSON composes them — gets rebound in one pass.</p>
  *
  * <p><b>Floating-island gating.</b> When {@code floatingIslandsField} is
  * {@code null} (the dimension profile has
  * {@code floatingIslandsEnabled == false}), {@link FloatingIslandsFunction}
  * placeholders are left as the stateless {@link FloatingIslandsFunction#INSTANCE}
- * — their {@code compute} returns {@code 0.0}, so an add+clamp composition
- * in the JSON passes the main terrain through unchanged. When non-null,
+ * — their {@code compute} returns {@code 0.0}, so the router's {@code max}
+ * composition passes the main terrain through unchanged. When non-null,
  * placeholders are rebound to {@link FloatingIslandsFunction.Bound}.</p>
  *
  * <p><b>Why a visitor and not direct injection.</b> The
@@ -56,34 +56,100 @@ public final class EndDensityVisitor implements DensityFunction.Visitor {
     private final EndDensity endDensity;
     private final FloatingIslandsField floatingIslandsField;
     private final int seed;
+    private final DensityFunction fallbackEndDensity;
+    private final DensityFunction.Visitor downstream;
+    private DensityFunction mappedFallbackEndDensity;
 
     public EndDensityVisitor(EndDensity endDensity,
                              FloatingIslandsField floatingIslandsField, int seed) {
+        this(endDensity, floatingIslandsField, seed, null, null);
+    }
+
+    public EndDensityVisitor(EndDensity endDensity,
+                             FloatingIslandsField floatingIslandsField, int seed,
+                             DensityFunction fallbackEndDensity) {
+        this(endDensity, floatingIslandsField, seed, fallbackEndDensity, null);
+    }
+
+    private EndDensityVisitor(EndDensity endDensity,
+                              FloatingIslandsField floatingIslandsField, int seed,
+                              DensityFunction fallbackEndDensity,
+                              DensityFunction.Visitor downstream) {
         this.endDensity = endDensity;
         this.floatingIslandsField = floatingIslandsField;
         this.seed = seed;
+        this.fallbackEndDensity = fallbackEndDensity;
+        this.downstream = downstream;
+    }
+
+    /**
+     * Creates a visitor that binds ETF placeholders before delegating to the owning
+     * {@code NoiseChunk} visitor.
+     *
+     * <p>The downstream visitor supplies vanilla's per-chunk interpolation and cache wrappers. The
+     * vanilla End fallback is mapped through it exactly once before it is stored in an ETF bound
+     * leaf. This makes the binding safe to compose with mods which wrap the outer
+     * {@code NoiseRouter.mapAll} invocation themselves.</p>
+     */
+    public static EndDensityVisitor withChunkVisitor(
+            DensityFunction.Visitor downstream,
+            EndDensity endDensity,
+            FloatingIslandsField floatingIslandsField,
+            int seed,
+            DensityFunction fallbackEndDensity) {
+        if (downstream == null) {
+            throw new NullPointerException("downstream");
+        }
+        return new EndDensityVisitor(
+                endDensity, floatingIslandsField, seed, fallbackEndDensity, downstream);
     }
 
     @Override
     public DensityFunction apply(DensityFunction function) {
-        // Main terrain placeholder — always rebound.
+        // Main terrain placeholder — rebound to EndTerraForged terrain on
+        // success, or to vanilla End final density after a failed bootstrap.
         if (function == EndDensityFunction.INSTANCE
                 || function instanceof EndDensityFunction.Bound) {
-            return new EndDensityFunction.Bound(this.endDensity, this.seed);
+            DensityFunction fallback = this.mappedFallbackEndDensity();
+            if (this.endDensity != null) {
+                return this.applyDownstream(
+                        new EndDensityFunction.Bound(this.endDensity, this.seed, fallback));
+            }
+            return fallback;
         }
         // Floating-island placeholder — rebound only when the layer is
         // enabled (field != null). Otherwise leave as INSTANCE (returns 0).
         if (this.floatingIslandsField != null) {
             if (function == FloatingIslandsFunction.INSTANCE
                     || function instanceof FloatingIslandsFunction.Bound) {
-                return new FloatingIslandsFunction.Bound(this.floatingIslandsField, this.seed);
+                double centralDensityFloor = this.mappedFallbackEndDensity().minValue();
+                return this.applyDownstream(new FloatingIslandsFunction.Bound(
+                        this.floatingIslandsField, this.seed, centralDensityFloor));
             }
         }
-        return function;
+        return this.applyDownstream(function);
     }
 
     @Override
     public DensityFunction.NoiseHolder visitNoise(DensityFunction.NoiseHolder noise) {
-        return noise;
+        return this.downstream == null ? noise : this.downstream.visitNoise(noise);
+    }
+
+    private DensityFunction mappedFallbackEndDensity() {
+        if (this.fallbackEndDensity == null) {
+            throw new IllegalStateException(
+                    "EndTerraForged cannot bind End density without a vanilla final-density fallback");
+        }
+        if (this.downstream == null) {
+            return this.fallbackEndDensity;
+        }
+        if (this.mappedFallbackEndDensity == null) {
+            this.mappedFallbackEndDensity = this.fallbackEndDensity.mapAll(this.downstream);
+        }
+        return this.mappedFallbackEndDensity;
+    }
+
+    private DensityFunction applyDownstream(DensityFunction function) {
+        return this.downstream == null ? function : this.downstream.apply(function);
     }
 }

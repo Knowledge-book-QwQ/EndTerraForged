@@ -10,48 +10,40 @@ package endterraforged.client.gui.screen;
 
 import java.util.function.Consumer;
 
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 
+import endterraforged.client.gui.widget.ActionButtonLayout;
 import endterraforged.client.gui.widget.EndSlider;
+import endterraforged.client.gui.widget.EditorColumnLayout;
+import endterraforged.client.gui.widget.EditorScrollLayout;
 import endterraforged.client.gui.widget.FloatSliderScale;
 import endterraforged.client.gui.widget.IntSliderScale;
+import endterraforged.world.config.EndPreset;
+import endterraforged.world.config.EndPresetBuilder;
 import endterraforged.world.filter.ErosionConfig;
 import endterraforged.world.filter.ErosionConfigBuilder;
+import endterraforged.world.preview.TerrainPreviewMode;
+import endterraforged.world.preview.TerrainPreviewSettings;
 
 /**
  * Sub-screen for editing the {@link ErosionConfig} embedded inside an
- * {@link endterraforged.world.config.EndPreset}.
- *
- * <p><b>Layout.</b> A vertical stack of 6 {@link EndSlider}s — 2 int
- * sliders (dropletsPerChunk, dropletLifetime) + 4 float sliders
- * (dropletVolume, dropletVelocity, erosionRate, depositRate) — plus
- * Done / Cancel buttons at the bottom.</p>
- *
- * <p><b>Why a sub-screen rather than inline on EndPresetEditorScreen.</b>
- * The EndPresetEditorScreen already has 7 widgets; adding 6 more would
- * overflow a single screen on small displays. A sub-screen keeps each
- * editor focused on one concern and lets the user navigate with Done /
- * Cancel rather than scrolling.</p>
- *
- * <p><b>Flow.</b> Opens from EndPresetEditorScreen's "Erosion..." button.
- * Done button calls {@code onDone.accept(builder.build())} (passing the
- * edited config back to the parent for embedding into EndPresetBuilder),
- * then closes back to the parent. Cancel closes without invoking onDone,
- * discarding the user's edits.</p>
- *
- * <p><b>Architecture.</b> Same as EndPresetEditorScreen: holds an
- * {@link ErosionConfigBuilder} (mutable editing state), widgets mutate the
- * builder, Done builds the immutable {@link ErosionConfig} and hands it
- * back via the {@code onDone} callback.</p>
- *
- * <p><b>Compile-only verification.</b> Like EndPresetEditorScreen, this
- * screen cannot be unit-tested in the sandbox (requires a live Minecraft).
- * The testable core lives in {@link ErosionConfigBuilder}.</p>
+ * {@link EndPreset}. It mirrors the continent/climate editor pattern: mutable
+ * config builder for sliders, preview preset builder for live snapshots, and a
+ * last-valid preset fallback if validation fails while dragging.
  */
 public class ErosionConfigEditorScreen extends Screen {
+
+    private static final int EDITOR_TOP = 50;
+    private static final int EDITOR_BOTTOM_MARGIN = 34;
+    private static final int WIDGET_HEIGHT = 20;
+    private static final int ROW_HEIGHT = 26;
+    private static final int SCROLL_STEP = 32;
+    private static final int SLIDER_ROWS = 6;
+    private static final int TRAILING_ROWS = 2;
 
     /** Slider scales — exposed as constants for test reference if needed. */
     private static final IntSliderScale DROPLETS_PER_CHUNK_SCALE =
@@ -67,95 +59,131 @@ public class ErosionConfigEditorScreen extends Screen {
     private static final FloatSliderScale DEPOSIT_RATE_SCALE =
             new FloatSliderScale(0.0f, 1.0f, 0.0f, 2);
 
+    private final Screen parent;
+    private final EndPresetBuilder previewBuilder;
     private final ErosionConfigBuilder builder;
     private final Consumer<ErosionConfig> onDone;
+    private EndPreset lastValidPreset;
+    private TerrainPreviewSettings previewSettings =
+            TerrainPreviewSettings.DEFAULT.withMode(TerrainPreviewMode.HEIGHT);
+    private int scrollOffset;
+    private int maxScroll;
+    private Component statusMessage;
 
     /**
-     * @param initial the erosion config to load for editing (or {@link ErosionConfig#DEFAULT})
+     * @param initial preset snapshot to load for editing
+     * @param parent screen to return to on Done/Cancel
      * @param onDone callback invoked with the built config when the user
      *               presses Done — the parent screen embeds it into its
      *               EndPresetBuilder via {@code builder.erosionConfig(config)}
      */
-    public ErosionConfigEditorScreen(ErosionConfig initial,
+    public ErosionConfigEditorScreen(EndPreset initial,
+                                     Screen parent,
                                      Consumer<ErosionConfig> onDone) {
         super(Component.translatable("endterraforged.gui.erosion_editor.title"));
-        this.builder = new ErosionConfigBuilder(initial);
+        this.previewBuilder = new EndPresetBuilder(initial);
+        this.builder = new ErosionConfigBuilder(initial.erosionConfig());
+        this.parent = parent;
         this.onDone = onDone;
+        this.lastValidPreset = initial;
+    }
+
+    @Override
+    public void onClose() {
+        Minecraft mc = Minecraft.getInstance();
+        if (mc != null) {
+            mc.setScreen(parent);
+            return;
+        }
+        super.onClose();
     }
 
     @Override
     protected void init() {
-        int cx = this.width / 2;
-        int y = 50;
-        final int widgetWidth = 200;
-        final int widgetHeight = 20;
-        final int rowHeight = 26;
+        int widgetWidth = Math.min(210, Math.max(120, this.width - 40));
+        int left = this.width >= 500
+                ? Math.max(20, this.width / 2 - 230)
+                : Math.max(20, (this.width - widgetWidth) / 2);
+        this.maxScroll = EditorScrollLayout.maxScroll(
+                EditorScrollLayout.contentBottom(EDITOR_TOP, ROW_HEIGHT, WIDGET_HEIGHT,
+                        SLIDER_ROWS, TRAILING_ROWS),
+                this.height, EDITOR_BOTTOM_MARGIN);
+        this.scrollOffset = EditorScrollLayout.clampScroll(this.scrollOffset, this.maxScroll);
+        int top = EDITOR_TOP - this.scrollOffset;
+        EditorColumnLayout column =
+                new EditorColumnLayout(left, top, widgetWidth, WIDGET_HEIGHT, ROW_HEIGHT);
 
-        // --- int sliders (dropletsPerChunk, dropletLifetime) ----------------
-
+        ActionButtonLayout.Bounds row = column.nextRow();
         addRenderableWidget(new EndSlider(
-                cx - widgetWidth / 2, y, widgetWidth, widgetHeight,
+                row.x(), row.y(), row.width(), row.height(),
                 Component.translatable("endterraforged.gui.erosion.droplets_per_chunk"),
                 DROPLETS_PER_CHUNK_SCALE, builder.dropletsPerChunk(),
                 v -> builder.dropletsPerChunk((int) v)));
-        y += rowHeight;
 
+        row = column.nextRow();
         addRenderableWidget(new EndSlider(
-                cx - widgetWidth / 2, y, widgetWidth, widgetHeight,
+                row.x(), row.y(), row.width(), row.height(),
                 Component.translatable("endterraforged.gui.erosion.droplet_lifetime"),
                 DROPLET_LIFETIME_SCALE, builder.dropletLifetime(),
                 v -> builder.dropletLifetime((int) v)));
-        y += rowHeight;
 
-        // --- float sliders (volume / velocity / erosionRate / depositRate) --
-
+        row = column.nextRow();
         addRenderableWidget(new EndSlider(
-                cx - widgetWidth / 2, y, widgetWidth, widgetHeight,
+                row.x(), row.y(), row.width(), row.height(),
                 Component.translatable("endterraforged.gui.erosion.droplet_volume"),
                 DROPLET_VOLUME_SCALE, builder.dropletVolume(),
                 v -> builder.dropletVolume((float) v)));
-        y += rowHeight;
 
+        row = column.nextRow();
         addRenderableWidget(new EndSlider(
-                cx - widgetWidth / 2, y, widgetWidth, widgetHeight,
+                row.x(), row.y(), row.width(), row.height(),
                 Component.translatable("endterraforged.gui.erosion.droplet_velocity"),
                 DROPLET_VELOCITY_SCALE, builder.dropletVelocity(),
                 v -> builder.dropletVelocity((float) v)));
-        y += rowHeight;
 
+        row = column.nextRow();
         addRenderableWidget(new EndSlider(
-                cx - widgetWidth / 2, y, widgetWidth, widgetHeight,
+                row.x(), row.y(), row.width(), row.height(),
                 Component.translatable("endterraforged.gui.erosion.erosion_rate"),
                 EROSION_RATE_SCALE, builder.erosionRate(),
                 v -> builder.erosionRate((float) v)));
-        y += rowHeight;
 
+        row = column.nextRow();
         addRenderableWidget(new EndSlider(
-                cx - widgetWidth / 2, y, widgetWidth, widgetHeight,
+                row.x(), row.y(), row.width(), row.height(),
                 Component.translatable("endterraforged.gui.erosion.deposit_rate"),
                 DEPOSIT_RATE_SCALE, builder.depositRate(),
                 v -> builder.depositRate((float) v)));
-        y += rowHeight;
+        column.space(4);
 
-        // --- Done / Cancel buttons ------------------------------------------
-
+        row = column.nextRow();
         addRenderableWidget(Button.builder(
-                        Component.translatable("endterraforged.gui.done"),
-                        btn -> {
-                            // Snapshot the builder state into an immutable
-                            // ErosionConfig and hand it back to the parent.
-                            ErosionConfig built = builder.build();
-                            if (onDone != null) onDone.accept(built);
-                            onClose();
-                        })
-                .bounds(cx - widgetWidth / 2, y, widgetWidth / 2 - 2, widgetHeight)
+                        Component.translatable("controls.reset"),
+                        btn -> resetToDefaults())
+                .bounds(row.x(), row.y(), row.width(), row.height())
                 .build());
 
-        addRenderableWidget(Button.builder(
-                        Component.translatable("gui.cancel"),
-                        btn -> onClose())
-                .bounds(cx + 2, y, widgetWidth / 2 - 2, widgetHeight)
-                .build());
+        row = column.nextRow();
+        EditorScreenWidgets.addActionBar(this::addRenderableWidget, ErosionConfigEditorScreen.class,
+                row.x(), row.y(), row.width(), row.height(),
+                Component.translatable("endterraforged.gui.done"),
+                () -> {
+                    try {
+                        ErosionConfig built = builder.build();
+                        if (onDone != null) onDone.accept(built);
+                        onClose();
+                    } catch (IllegalStateException e) {
+                        statusMessage = Component.literal(e.getMessage());
+                    }
+                },
+                Component.translatable("gui.cancel"),
+                this::onClose);
+
+        EditorScreenWidgets.addLivePreview(this::addRenderableWidget, left + widgetWidth + 28,
+                this.width, previewSettings,
+                mode -> previewSettings = previewSettings.withMode(mode),
+                scale -> previewSettings = previewSettings.withScale(scale),
+                this::buildPreviewPreset, () -> previewSettings);
     }
 
     @Override
@@ -163,5 +191,42 @@ public class ErosionConfigEditorScreen extends Screen {
         renderBackground(graphics, mouseX, mouseY, partialTick);
         super.render(graphics, mouseX, mouseY, partialTick);
         graphics.drawCenteredString(this.font, this.title, this.width / 2, 20, 0xFFFFFF);
+        EditorScreenWidgets.renderStatus(graphics, this.font, statusMessage, this.width, this.height);
+    }
+
+    @Override
+    public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+        if (maxScroll <= 0) {
+            return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
+        }
+        int next = EditorScrollLayout.scrollOffsetAfterWheel(scrollOffset, maxScroll,
+                scrollY, SCROLL_STEP);
+        if (next == scrollOffset) {
+            return true;
+        }
+        scrollOffset = next;
+        rebuildWidgets();
+        return true;
+    }
+
+    private void resetToDefaults() {
+        builder.reset();
+        lastValidPreset = previewBuilder.erosionConfig(ErosionConfig.DEFAULT).build();
+        statusMessage = null;
+        Minecraft mc = Minecraft.getInstance();
+        if (mc != null) {
+            mc.setScreen(this);
+        }
+    }
+
+    private EndPreset buildPreviewPreset() {
+        try {
+            ErosionConfig built = builder.build();
+            lastValidPreset = previewBuilder.erosionConfig(built).build();
+            statusMessage = null;
+        } catch (IllegalStateException e) {
+            statusMessage = Component.literal(e.getMessage());
+        }
+        return lastValidPreset;
     }
 }

@@ -319,6 +319,63 @@ class BiomeClimatePresetTest {
         }
     }
 
+    @Test
+    void allVariantRangesOverlapNamedClimateBands() {
+        for (String file : PRESET_FILES) {
+            JsonObject climate = biomeClimateOf(biomeSourceOf(loadPreset(file)));
+            for (JsonObject variant : allVariants(climate)) {
+                float tMin = variant.get("temperature_min").getAsFloat();
+                float tMax = variant.get("temperature_max").getAsFloat();
+                float mMin = variant.get("moisture_min").getAsFloat();
+                float mMax = variant.get("moisture_max").getAsFloat();
+                assertTrue(overlapsTemperatureBand(tMin, tMax),
+                        file + " variant temperature range does not overlap a named band: " + variant);
+                assertTrue(overlapsMoistureBand(mMin, mMax),
+                        file + " variant moisture range does not overlap a named band: " + variant);
+            }
+        }
+    }
+
+    @Test
+    void coldEndVariantsStayInColdTemperatureBands() {
+        JsonObject climate = biomeClimateOf(biomeSourceOf(loadPreset("cold_end.json")));
+        for (JsonObject variant : allVariants(climate)) {
+            float max = variant.get("temperature_max").getAsFloat();
+            assertTrue(max <= BiomeClimateBands.Temperature.COLD.max(),
+                    "cold_end.json variant exceeds cold temperature bands: " + variant);
+        }
+    }
+
+    @Test
+    void temperateEndVariantsOverlapTemperateBand() {
+        JsonObject climate = biomeClimateOf(biomeSourceOf(loadPreset("temperate_end.json")));
+        for (JsonObject variant : allVariants(climate)) {
+            float min = variant.get("temperature_min").getAsFloat();
+            float max = variant.get("temperature_max").getAsFloat();
+            assertTrue(overlaps(min, max,
+                            BiomeClimateBands.Temperature.TEMPERATE.min(),
+                            BiomeClimateBands.Temperature.TEMPERATE.max()),
+                    "temperate_end.json variant does not overlap temperate band: " + variant);
+        }
+    }
+
+    @Test
+    void hotEndVariantsOverlapWarmOrHotBands() {
+        JsonObject climate = biomeClimateOf(biomeSourceOf(loadPreset("hot_end.json")));
+        for (JsonObject variant : allVariants(climate)) {
+            float min = variant.get("temperature_min").getAsFloat();
+            float max = variant.get("temperature_max").getAsFloat();
+            boolean warm = overlaps(min, max,
+                    BiomeClimateBands.Temperature.WARM.min(),
+                    BiomeClimateBands.Temperature.WARM.max());
+            boolean hot = overlaps(min, max,
+                    BiomeClimateBands.Temperature.HOT.min(),
+                    BiomeClimateBands.Temperature.HOT.max());
+            assertTrue(warm || hot,
+                    "hot_end.json variant does not overlap warm or hot bands: " + variant);
+        }
+    }
+
     // ----- 6. overworld + nether biome mix invariant ---------------------
 
     @Test
@@ -352,5 +409,27 @@ class BiomeClimatePresetTest {
             assertTrue(hasNether,
                     file + " must contain at least one nether biome variant");
         }
+    }
+
+    private static boolean overlapsTemperatureBand(float min, float max) {
+        for (BiomeClimateBands.Temperature band : BiomeClimateBands.Temperature.values()) {
+            if (overlaps(min, max, band.min(), band.max())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean overlapsMoistureBand(float min, float max) {
+        for (BiomeClimateBands.Moisture band : BiomeClimateBands.Moisture.values()) {
+            if (overlaps(min, max, band.min(), band.max())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean overlaps(float minA, float maxA, float minB, float maxB) {
+        return minA <= maxB && maxA >= minB;
     }
 }

@@ -14,8 +14,8 @@
     "min_inclusive": 0
   },
   "monster_spawn_block_light_limit": 0,
-  "min_y": -2032,
-  "height": 4064,
+  "min_y": -256,
+  "height": 512,
   "logical_height": 256,
   "infiniburn": "#minecraft:infiniburn_end",
   "effects": "minecraft:the_end",

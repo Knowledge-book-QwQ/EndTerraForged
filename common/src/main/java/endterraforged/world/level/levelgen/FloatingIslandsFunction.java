@@ -12,6 +12,7 @@ import com.mojang.serialization.MapCodec;
 import net.minecraft.util.KeyDispatchDataCodec;
 import net.minecraft.world.level.levelgen.DensityFunction;
 
+import endterraforged.world.continent.EndCentralRegionPolicy;
 import endterraforged.world.floatingislands.FloatingIslandsField;
 
 /**
@@ -32,25 +33,23 @@ import endterraforged.world.floatingislands.FloatingIslandsField;
  * channel's value (it IS the {@code final_density}). The floating-island
  * layer must <em>combine</em> with the main terrain: solid where either
  * the main terrain OR an island is solid. In the noise_settings JSON this
- * is expressed by composing the two via a {@code add}+{@code clamp} node
- * (vanilla density functions support arithmetic composition), so the
+ * is expressed by composing the two via a {@code max} node, so the
  * JSON's {@code final_density} looks roughly like:
  * <pre>{@code
- * { "type": "minecraft:clamp",
- *   "input": { "type": "minecraft:add",
- *              "argument1": "endterraforged:end_density",
- *              "argument2": "endterraforged:floating_islands" },
- *   "min": 0, "max": 1 }
+ * { "type": "minecraft:max",
+ *   "argument1": "endterraforged:end_density",
+ *   "argument2": "endterraforged:floating_islands" }
  * }</pre>
- * The {@code add} works because both functions output {@code [0,1]} —
- * summing two {@code [0,1]} values then clamping to {@code [0,1]} is
- * equivalent to boolean OR.</p>
+ * Both ETF fields are in {@code [0,1]}, so {@code max} is their boolean
+ * union without the temporary array allocated by vanilla's add node. In the
+ * protected central region, the overlay instead returns vanilla density's
+ * lower bound, making {@code max(vanilla, lowerBound)} an exact identity.</p>
  *
  * <p><b>Gating by {@code floatingIslandsEnabled}.</b> When the dimension
  * profile has {@code floatingIslandsEnabled == false}, the
  * {@link EndDensityVisitor} does NOT rebind this placeholder (it checks
  * the flag before binding), so the placeholder's {@code compute} returns
- * {@code 0.0} — the add+clamp then passes the main terrain through
+ * {@code 0.0} — the {@code max} node passes the main terrain through
  * unchanged. This keeps a single noise_settings JSON valid for both
  * enabled/disabled modes; the toggle is runtime, not JSON.</p>
  */
@@ -93,14 +92,28 @@ public final class FloatingIslandsFunction implements DensityFunction.SimpleFunc
 
         private final FloatingIslandsField field;
         private final int seed;
+        private final double centralDensityFloor;
 
         public Bound(FloatingIslandsField field, int seed) {
+            this(field, seed, Double.NaN);
+        }
+
+        /**
+         * Creates an overlay bound to the minimum of the protected vanilla
+         * density. This keeps the router's {@code max(main, floating)} node
+         * mathematically neutral inside the protected central region.
+         */
+        public Bound(FloatingIslandsField field, int seed, double centralDensityFloor) {
             this.field = field;
             this.seed = seed;
+            this.centralDensityFloor = centralDensityFloor;
         }
 
         @Override
         public double compute(DensityFunction.FunctionContext context) {
+            if (EndCentralRegionPolicy.usesVanillaDensity(context.blockX(), context.blockZ())) {
+                return Double.isNaN(this.centralDensityFloor) ? 0.0 : this.centralDensityFloor;
+            }
             return this.field.solidity(
                     (float) context.blockX(),
                     context.blockY(),
@@ -111,7 +124,9 @@ public final class FloatingIslandsFunction implements DensityFunction.SimpleFunc
 
         @Override
         public double minValue() {
-            return 0.0;
+            return Double.isNaN(this.centralDensityFloor)
+                    ? 0.0
+                    : Math.min(0.0, this.centralDensityFloor);
         }
 
         @Override

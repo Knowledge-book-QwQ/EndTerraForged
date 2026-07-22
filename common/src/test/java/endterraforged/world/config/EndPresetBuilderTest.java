@@ -3,6 +3,8 @@ package endterraforged.world.config;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import org.junit.jupiter.api.Test;
 
@@ -31,6 +33,9 @@ class EndPresetBuilderTest {
     void roundTripFromPresetIsIdentity() {
         EndPreset original = new EndPreset(2048, -1024, 64, 0,
                 SeaMode.WITH_FLOOR, TopologyMode.CONTINENTAL_SHATTERED, true,
+                ContinentConfig.defaults(),
+                new TerrainConfig(0.75F, 2.0F),
+                new ClimateConfig(6000.0F, 900, 1200, 1500, 0.4F),
                 new ErosionConfig(256, 64, 1.5F, 0.8F, 0.3F, 0.7F));
         EndPreset roundTripped = new EndPresetBuilder(original).build();
         assertEquals(original, roundTripped,
@@ -40,13 +45,18 @@ class EndPresetBuilderTest {
     @Test
     void resetRestoresDefaults() {
         EndPresetBuilder b = new EndPresetBuilder()
-                .worldHeight(999)
-                .minY(-999)
+                .worldHeight(1024)
+                .minY(-512)
                 .seaLevelY(123)
-                .islandBaselineY(456)
+                .islandBaselineY(256)
                 .seaMode(SeaMode.WITH_FLOOR)
                 .topologyMode(TopologyMode.CONTINENTAL_SHATTERED)
                 .floatingIslandsEnabled(true)
+                .continentConfig(ContinentConfig.defaults())
+                .terrainConfig(new TerrainConfig(0.5F, 2.5F))
+                .climateConfig(new ClimateConfig(6000.0F, 900, 1200, 1500, 0.4F))
+                .subsurfaceConfig(new SubsurfaceConfig(
+                        new AbyssPitConfig(true, 1700, 640, 0.65F, 0.2F, 512, 0.1F)))
                 .erosionConfig(new ErosionConfig(1, 1, 1.0F, 1.0F, 1.0F, 1.0F));
         assertNotEquals(EndPreset.defaults(), b.build(),
                 "sanity: builder was mutated away from defaults before reset");
@@ -56,26 +66,83 @@ class EndPresetBuilderTest {
     }
 
     @Test
+    void loadReplacesCurrentState() {
+        EndPreset replacement = new EndPreset(2048, -1024, 64, 0,
+                SeaMode.WITH_FLOOR, TopologyMode.CONTINENTAL_SHATTERED, true,
+                ContinentConfig.defaults(),
+                new TerrainConfig(0.75F, 2.0F),
+                new ClimateConfig(6000.0F, 900, 1200, 1500, 0.4F),
+                BiomeLayoutConfig.DEFAULT,
+                SubsurfaceConfig.DEFAULT,
+                new ErosionConfig(256, 64, 1.5F, 0.8F, 0.3F, 0.7F));
+        EndPresetBuilder b = new EndPresetBuilder()
+                .worldHeight(1024)
+                .minY(-512);
+
+        assertSame(b, b.load(replacement));
+
+        assertEquals(replacement, b.build(),
+                "load(preset) must replace every builder field with the supplied preset");
+    }
+
+    @Test
+    void loadRejectsNullPreset() {
+        assertThrows(NullPointerException.class, () -> new EndPresetBuilder().load(null));
+    }
+
+    @Test
+    void explicitFeatureUpgradePromotesLegacyPresetToCurrentFormat() {
+        EndPreset defaults = EndPreset.defaults();
+        EndPreset legacy = new EndPreset(defaults.worldHeight(), defaults.minY(), defaults.seaLevelY(),
+                defaults.islandBaselineY(), defaults.seaMode(), defaults.topologyMode(),
+                defaults.floatingIslandsEnabled(), defaults.continentConfig(), defaults.terrainConfig(),
+                defaults.climateConfig(), defaults.biomeLayoutConfig(), defaults.subsurfaceConfig(),
+                defaults.erosionConfig(), 2);
+        EndPresetBuilder builder = new EndPresetBuilder(legacy);
+
+        assertEquals(2, builder.formatVersion());
+        assertSame(builder, builder.upgradeToCurrentFormat());
+        assertEquals(EndPreset.CURRENT_FORMAT_VERSION, builder.build().formatVersion());
+    }
+
+    @Test
     void eachSetterStoresValue() {
         EndPresetBuilder b = new EndPresetBuilder();
         ErosionConfig custom = new ErosionConfig(200, 50, 0.7F, 1.2F, 0.4F, 0.6F);
-        b.worldHeight(3000)
-         .minY(-1500)
+        TerrainConfig terrain = new TerrainConfig(0.8F, 2.2F);
+        ClimateConfig climate = new ClimateConfig(6000.0F, 900, 1200, 1500, 0.4F);
+        BiomeLayoutConfig biomeLayout = new BiomeLayoutConfig(32, 6.0F, 35.0F, -5.0F,
+                180, 3, 2.5F, 0.65F, 22.0F,
+                360, 2, 0.35F);
+        SubsurfaceConfig subsurface = new SubsurfaceConfig(
+                new AbyssPitConfig(true, 1700, 640, 0.65F, 0.2F, 512, 0.1F));
+        b.worldHeight(3008)
+         .minY(-1504)
          .seaLevelY(32)
          .islandBaselineY(-64)
          .seaMode(SeaMode.WITH_FLOOR)
          .topologyMode(TopologyMode.CONTINENTAL_SHATTERED)
          .floatingIslandsEnabled(true)
+         .continentConfig(ContinentConfig.defaults())
+         .terrainConfig(terrain)
+         .climateConfig(climate)
+         .biomeLayoutConfig(biomeLayout)
+         .subsurfaceConfig(subsurface)
          .erosionConfig(custom);
 
         EndPreset built = b.build();
-        assertEquals(3000, built.worldHeight());
-        assertEquals(-1500, built.minY());
+        assertEquals(3008, built.worldHeight());
+        assertEquals(-1504, built.minY());
         assertEquals(32, built.seaLevelY());
         assertEquals(-64, built.islandBaselineY());
         assertEquals(SeaMode.WITH_FLOOR, built.seaMode());
         assertEquals(TopologyMode.CONTINENTAL_SHATTERED, built.topologyMode());
-        assertEquals(true, built.floatingIslandsEnabled());
+        assertTrue(built.floatingIslandsEnabled());
+        assertEquals(ContinentConfig.defaults(), built.continentConfig());
+        assertEquals(terrain, built.terrainConfig());
+        assertEquals(climate, built.climateConfig());
+        assertEquals(biomeLayout, built.biomeLayoutConfig());
+        assertEquals(subsurface, built.subsurfaceConfig());
         assertEquals(custom, built.erosionConfig());
     }
 
@@ -90,6 +157,10 @@ class EndPresetBuilderTest {
         EndPreset d = EndPreset.defaults();
         assertEquals(d.minY(), b.minY());
         assertEquals(d.seaMode(), b.seaMode());
+        assertEquals(d.terrainConfig(), b.terrainConfig());
+        assertEquals(d.climateConfig(), b.climateConfig());
+        assertEquals(d.biomeLayoutConfig(), b.biomeLayoutConfig());
+        assertEquals(d.subsurfaceConfig(), b.subsurfaceConfig());
     }
 
     @Test
@@ -114,10 +185,20 @@ class EndPresetBuilderTest {
     void buildProducesConsistentPresetEachCall() {
         EndPresetBuilder b = new EndPresetBuilder()
                 .worldHeight(4000)
+                .minY(-2032)
                 .seaLevelY(100);
         EndPreset first = b.build();
         EndPreset second = b.build();
         assertEquals(first, second,
                 "build() called twice without mutation must produce equal presets");
+    }
+
+    @Test
+    void buildRejectsInvalidState() {
+        IllegalStateException e = assertThrows(IllegalStateException.class,
+                () -> new EndPresetBuilder()
+                        .worldHeight(15)
+                        .build());
+        assertTrue(e.getMessage().contains("world_height"));
     }
 }

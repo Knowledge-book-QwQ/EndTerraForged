@@ -95,13 +95,12 @@ class ErosionFactoryTest {
         for (int z = 0; z < total; z++) {
             for (int x = 0; x < total; x++) {
                 Cell c = new Cell();
-                // Ramp straddles the NONE-mode ground band (ground(0) ~= 0.016
-                // in a 4064-tall world) so the band's ramp modifier actually
-                // varies across the field. A field entirely above the band
-                // would see modifier==1 everywhere and could not distinguish
-                // sea modes — the original test caught that gap.
+                // The reference world has min_y=-2032, so ground lies near
+                // 0.5 in normalised coordinates. Keep the ramp across both
+                // sea-mode ground bands; absolute-Y normalisation would put
+                // it near 0.0 and hide the min_y regression this test covers.
                 float t = (float) x / (total - 1);
-                c.height = 0.005f + 0.05f * t;
+                c.height = 0.515f + 0.05f * t;
                 cells[z * total + x] = c;
             }
         }

@@ -19,9 +19,9 @@
     ]
   },
   "depends": {
-    "fabricloader": ">=0.14.14",
-    "fabric": ">=0.86.1",
-    "minecraft": ">=1.21.1"
+    "fabricloader": ">=${fabricLoaderVersion}",
+    "fabric": ">=${fabricApiVersion}",
+    "minecraft": ">=${minecraftVersion}"
   },
   "mixins": [
     "endterraforged-common.mixins.json",

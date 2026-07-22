@@ -81,14 +81,56 @@ public record EndClimate(Noise temperature, Noise moisture, Noise wind,
      * distance uses the warp-free radial distance; a small domain warp on the
      * perturbation field keeps the isotherms from looking too regular.</p>
      *
-     * <p>Moisture and wind are simplex fields mapped to [0,1].</p>
+     * <p>Moisture and wind are simplex fields mapped to [0,1]. The extended
+     * constructor can then apply falloff/bias/clamp shaping to temperature and
+     * moisture for RTF-style preset range controls.</p>
      */
     public EndClimate(int seed, float climateRadius,
                       int temperatureScale, int moistureScale, int windScale,
                       float perturbation) {
+        this(seed, climateRadius, temperatureScale, 600, moistureScale, 700, windScale, perturbation,
+                1.0F, 0.0F, 1.0F, 0.0F,
+                1.0F, 0.0F, 1.0F, 0.0F);
+    }
+
+    public EndClimate(int seed, float climateRadius,
+                      int temperatureScale, int moistureScale, int windScale,
+                      float perturbation,
+                      float temperatureMin, float temperatureMax, float temperatureBias,
+                      float moistureMin, float moistureMax, float moistureBias) {
+        this(seed, climateRadius, temperatureScale, 600, moistureScale, 700, windScale, perturbation,
+                1.0F, temperatureMin, temperatureMax, temperatureBias,
+                1.0F, moistureMin, moistureMax, moistureBias);
+    }
+
+    public EndClimate(int seed, float climateRadius,
+                      int temperatureScale, int temperatureSeedOffset,
+                      int moistureScale, int moistureSeedOffset, int windScale,
+                      float perturbation,
+                      float temperatureMin, float temperatureMax, float temperatureBias,
+                      float moistureMin, float moistureMax, float moistureBias) {
+        this(seed, climateRadius, temperatureScale, temperatureSeedOffset,
+                moistureScale, moistureSeedOffset, windScale, perturbation,
+                1.0F, temperatureMin, temperatureMax, temperatureBias,
+                1.0F, moistureMin, moistureMax, moistureBias);
+    }
+
+    public EndClimate(int seed, float climateRadius,
+                      int temperatureScale, int temperatureSeedOffset,
+                      int moistureScale, int moistureSeedOffset, int windScale,
+                      float perturbation,
+                      float temperatureFalloff,
+                      float temperatureMin, float temperatureMax, float temperatureBias,
+                      float moistureFalloff,
+                      float moistureMin, float moistureMax, float moistureBias) {
         this(
-                buildTemperature(seed, climateRadius, temperatureScale, perturbation),
-                Noises.map(Noises.simplex(seed + 700, moistureScale, 4), 0.0F, 1.0F),
+                range(falloff(buildTemperature(seed, climateRadius, temperatureScale,
+                                temperatureSeedOffset, perturbation),
+                                temperatureFalloff),
+                        temperatureMin, temperatureMax, temperatureBias),
+                range(falloff(Noises.map(Noises.simplex(seed + moistureSeedOffset, moistureScale, 4), 0.0F, 1.0F),
+                                moistureFalloff),
+                        moistureMin, moistureMax, moistureBias),
                 Noises.map(Noises.simplex(seed + 800, windScale, 4), 0.0F, 1.0F),
                 climateRadius,
                 perturbation
@@ -134,10 +176,16 @@ public record EndClimate(Noise temperature, Noise moisture, Noise wind,
      */
     private static Noise buildTemperature(int seed, float climateRadius,
                                           int perturbScale, float perturbation) {
+        return buildTemperature(seed, climateRadius, perturbScale, 600, perturbation);
+    }
+
+    private static Noise buildTemperature(int seed, float climateRadius,
+                                          int perturbScale, int seedOffset,
+                                          float perturbation) {
         // Perturbation: warped simplex in [-1,1], scaled to [-perturbation, +perturbation].
         Noise perturbField = Noises.warpPerlin(
-                Noises.simplex(seed + 600, perturbScale, 4),
-                seed + 601, perturbScale * 2, 3, 40.0F);
+                Noises.simplex(seed + seedOffset, perturbScale, 4),
+                seed + seedOffset + 1, perturbScale * 2, 3, 40.0F);
         Noise perturbScaled = Noises.mul(
                 Noises.map(perturbField, -1.0F, 1.0F),
                 perturbation);
@@ -145,5 +193,20 @@ public record EndClimate(Noise temperature, Noise moisture, Noise wind,
         // time). Add the perturbation, then clamp to [0,1].
         Noise base = new RadialBand(climateRadius);
         return Noises.clamp(Noises.add(base, perturbScaled), 0.0F, 1.0F);
+    }
+
+    private static Noise range(Noise input, float min, float max, float bias) {
+        if (min == 0.0F && max == 1.0F && bias == 0.0F) {
+            return input;
+        }
+        Noise biased = bias == 0.0F ? input : Noises.add(input, bias * 0.5F);
+        return Noises.clamp(biased, min, max);
+    }
+
+    private static Noise falloff(Noise input, float falloff) {
+        if (falloff == 1.0F) {
+            return input;
+        }
+        return new ClimateFalloff(input, falloff);
     }
 }

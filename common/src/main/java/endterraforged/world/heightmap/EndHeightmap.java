@@ -596,12 +596,16 @@ public final class EndHeightmap {
         float west = getTerrainHeight(x - distance, z, seed);
         float south = getTerrainHeight(x, z + distance, seed);
         float north = getTerrainHeight(x, z - distance, seed);
-        float dx = (east - west) / (2.0F * distance);
-        float dz = (south - north) / (2.0F * distance);
+        // Raw terrain tops are normalized; restore world-block units before
+        // deriving gradient signals so identical physical terrain remains
+        // identical across world-height presets.
+        float worldHeight = this.levels.worldHeight;
+        float dx = (east - west) * worldHeight / (2.0F * distance);
+        float dz = (south - north) * worldHeight / (2.0F * distance);
         float gradient = (float) Math.sqrt(dx * dx + dz * dz);
         float slope = gradient / (1.0F + gradient);
         float laplacian = (east + west + south + north - 4.0F * centre)
-                / (distance * distance);
+                * worldHeight / (distance * distance);
         float curvature = laplacian / (1.0F + Math.abs(laplacian));
         output.set(centre, slope, curvature, signals);
     }

@@ -306,9 +306,9 @@
   [`docs/P4_7_EROSION_ALGORITHM_RESEARCH.md`](docs/P4_7_EROSION_ALGORITHM_RESEARCH.md)。
 - local baseline 与所有候选都不新增 Codec/Validator/Builder/UI，不改义 v3 droplet `ErosionConfig`，不创建
   私有 worldgen executor。只有获选的正式 runtime 完成 preview、性能和客户端门禁后才能开放 v4 参数。
-- `EndTerrainProfileBuffer` 的 raw top 使用归一化高度，但 slope/curvature 的导数必须先按
-  `worldHeight` 换算为世界方块量纲。现有实现直接对归一化 top 求差，与 Javadoc 不一致；P4.7a 必须用
-  synthetic plane/paraboloid 覆盖 Standard 与高世界，避免侵蚀强度随世界高度错误缩放。
+- 2026-07-23 已修正 `EndTerrainProfileBuffer` 的导数量纲：raw top 仍使用归一化高度，但
+  `EndHeightmap.sampleTerrainProfile` 现在先按 `EndLevels.worldHeight` 换算 slope/curvature 的世界方块量纲。
+  Standard 与 1024 高世界的 synthetic plane/paraboloid 尺度不变量测试已锁定该契约，避免侵蚀强度随世界高度错误缩放。
 - 首批输出只保留 final top、signed erosion delta、erosion strength、drainage potential 和 activation；
   不伪造 sediment。raw profile metrics 只作为侵蚀输入，erosion/smoothing 后的公开 surface metrics 必须
   重新计算。

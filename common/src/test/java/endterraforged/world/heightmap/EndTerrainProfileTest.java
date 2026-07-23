@@ -54,6 +54,24 @@ class EndTerrainProfileTest {
     }
 
     @Test
+    void profileDerivativesUseWorldBlockUnitsAcrossHeightPresets() {
+        EndHeightmap standard = new EndHeightmap(
+                scaledProfile(512), SEED, normalizedPlaneAndBowl(512));
+        EndHeightmap tall = new EndHeightmap(
+                scaledProfile(1024), SEED, normalizedPlaneAndBowl(1024));
+        EndTerrainProfileBuffer standardProfile = new EndTerrainProfileBuffer();
+        EndTerrainProfileBuffer tallProfile = new EndTerrainProfileBuffer();
+
+        standard.sampleTerrainProfile(128.0F, 0.0F, SEED, standardProfile);
+        tall.sampleTerrainProfile(128.0F, 0.0F, SEED, tallProfile);
+
+        assertEquals(standardProfile.slope(), tallProfile.slope(), 1.0E-5F);
+        assertEquals(standardProfile.curvature(), tallProfile.curvature(), 1.0E-5F);
+        assertTrue(standardProfile.slope() > 0.0F);
+        assertTrue(standardProfile.curvature() > 0.0F);
+    }
+
+    @Test
     void nullProfileDestinationIsRejected() {
         EndHeightmap heightmap = new EndHeightmap(flatProfile(), SEED, constantNoise(0.0F));
 
@@ -86,6 +104,35 @@ class EndTerrainProfileTest {
             @Override
             public float maxValue() {
                 return value;
+            }
+
+            @Override
+            public Noise mapAll(Visitor visitor) {
+                return visitor.apply(this);
+            }
+        };
+    }
+
+    private static TestProfile scaledProfile(int worldHeight) {
+        return new TestProfile(worldHeight, 0, 0, 0,
+                SeaMode.NONE, TopologyMode.CONTINENTAL, false);
+    }
+
+    private static Noise normalizedPlaneAndBowl(float worldHeight) {
+        return new Noise() {
+            @Override
+            public float compute(float x, float z, int seed) {
+                return 0.25F + 0.05F * x / worldHeight + 0.0001F * x * x / worldHeight;
+            }
+
+            @Override
+            public float minValue() {
+                return 0.0F;
+            }
+
+            @Override
+            public float maxValue() {
+                return 1.0F;
             }
 
             @Override

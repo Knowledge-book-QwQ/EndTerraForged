@@ -325,6 +325,9 @@
 - 2026-07-23 已加入 24 次 full-column cold/warm 观测；一次完整 `:common:test` 在本机 JDK 21 记录
   cold p50/p95 `2.115/3.872 ms`、warm p50/p95 `1.452/3.161 ms`，且 checksum 相同。这些数值只用于
   追踪回归，不是跨硬件阈值；视觉和性能仍须在同一 fixture 与客户端矩阵中同时通过。
+- P4.7 候选算法的 canonical test artifact 固定为 33 x 33 primitive grid、2-cell halo、4-block sample
+  distance 和 Standard 512 derivative scale。fixture 同时携带 raw top、landness、inlandness、available
+  thickness 与 archipelago-dominant gate；候选不得各自替换输入、halo 或采样尺度来取得更好结果。
 - RTF droplet 可移植 gradient、inertia、capacity、erosion/deposition、evaporation 与 filter 顺序，但不能
   搬入 `Cell[]`、per-cell `int[][]/float[][]` brush、单尺寸 `WorldErosion`、私有 worldgen executor、对象池
   或 scheduled cache。ETF 候选使用 primitive SoA、canonical world-space tile/source、fixed halo 和有界

@@ -199,6 +199,16 @@ public final class EndDensity {
         return column.oceanFloorY();
     }
 
+    /** Enables per-thread column-cache counters for a focused benchmark or test. */
+    static void configureColumnCacheMetrics(boolean enabled) {
+        COLUMN_SAMPLES.get().configureMetrics(enabled);
+    }
+
+    /** Returns a snapshot of the current thread's column-cache counters. */
+    static ColumnCacheMetrics columnCacheMetrics() {
+        return COLUMN_SAMPLES.get().metricsSnapshot();
+    }
+
     /** The backing heightmap (exposed for stage-3 bridge code and tests). */
     public EndHeightmap heightmap() {
         return this.heightmap;
@@ -226,11 +236,19 @@ public final class EndDensity {
         private final EndLandmassSignalBuffer signals = new EndLandmassSignalBuffer();
         private WeakReference<EndDensity> owner = new WeakReference<>(null);
         private int selectedIndex;
+        private MutableColumnCacheMetrics metrics;
 
         private void refresh(EndDensity density, float x, float z, int seed) {
+            MutableColumnCacheMetrics metrics = this.metrics;
+            if (metrics != null) {
+                metrics.requests++;
+            }
             if (this.owner.get() != density) {
                 this.owner = new WeakReference<>(density);
                 Arrays.fill(this.initialized, false);
+                if (metrics != null) {
+                    metrics.ownerSwaps++;
+                }
             }
 
             EndHeightmap heightmap = density.heightmap;
@@ -241,7 +259,18 @@ public final class EndDensity {
             this.selectedIndex = index;
             if (this.initialized[index] && this.xBits[index] == nextXBits
                     && this.zBits[index] == nextZBits && this.seeds[index] == seed) {
+                if (metrics != null) {
+                    metrics.hits++;
+                }
                 return;
+            }
+
+            if (metrics != null) {
+                metrics.misses++;
+                if (this.initialized[index]) {
+                    metrics.collisions++;
+                    metrics.evictions++;
+                }
             }
 
             this.xBits[index] = nextXBits;
@@ -252,6 +281,9 @@ public final class EndDensity {
             this.heightNorm[index] = this.landness[index] > 0.0F
                     ? heightmap.getHeight(x, z, seed, this.signals)
                     : 0.0F;
+            if (metrics != null && this.landness[index] > 0.0F) {
+                metrics.fullColumnRefreshes++;
+            }
             this.undersideNorm[index] = landmassVolume.isFinite() && this.landness[index] > 0.0F
                     ? landmassVolume.underside(x, z, this.landness[index], this.heightNorm[index])
                     : 0.0F;
@@ -259,6 +291,15 @@ public final class EndDensity {
                     ? oceanFloorY(density.levels, x, z, seed)
                     : density.levels.minY;
             this.initialized[index] = true;
+        }
+
+        private void configureMetrics(boolean enabled) {
+            this.metrics = enabled ? new MutableColumnCacheMetrics() : null;
+            Arrays.fill(this.initialized, false);
+        }
+
+        private ColumnCacheMetrics metricsSnapshot() {
+            return this.metrics == null ? ColumnCacheMetrics.ZERO : this.metrics.snapshot();
         }
 
         private float landness() {
@@ -293,6 +334,27 @@ public final class EndDensity {
             hash *= 0x7feb352d;
             hash ^= hash >>> 15;
             return hash & COLUMN_CACHE_MASK;
+        }
+    }
+
+    static record ColumnCacheMetrics(long requests, long hits, long misses,
+                                     long collisions, long evictions,
+                                     long ownerSwaps, long fullColumnRefreshes) {
+        private static final ColumnCacheMetrics ZERO = new ColumnCacheMetrics(0, 0, 0, 0, 0, 0, 0);
+    }
+
+    private static final class MutableColumnCacheMetrics {
+        private long requests;
+        private long hits;
+        private long misses;
+        private long collisions;
+        private long evictions;
+        private long ownerSwaps;
+        private long fullColumnRefreshes;
+
+        private ColumnCacheMetrics snapshot() {
+            return new ColumnCacheMetrics(requests, hits, misses, collisions, evictions,
+                    ownerSwaps, fullColumnRefreshes);
         }
     }
 }

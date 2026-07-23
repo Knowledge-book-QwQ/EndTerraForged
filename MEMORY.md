@@ -301,8 +301,9 @@
 - local analytical runtime 是 immutable、逐列纯函数，只使用 caller-owned primitive buffer 和实现内部
   固定常量。它作为低成本 baseline/fallback，不预先视为正式算法。P4.7 统一比较 local analytical、
   RTF-derived hydraulic primitive tile、2024 stream-power analytical/multigrid、Priority-Flood +
-  D8/D-infinity + stream-power，以及 bounded thermal 收尾；选择依据视觉、首块延迟、内存、分块连续性、
-  访问顺序、C2ME 和 JFR。详细调研见
+  D8/D-infinity + stream-power，以及 bounded thermal 收尾；视觉质量与性能优化是同等硬门禁，任何候选
+  不能用更快的首块延迟换取 ridge/plateau/coast/archipelago 保真下降，也不能用更好的外观掩盖
+  首块 p95、内存、分块连续性、访问顺序、C2ME 或 JFR 失败。详细调研见
   [`docs/P4_7_EROSION_ALGORITHM_RESEARCH.md`](docs/P4_7_EROSION_ALGORITHM_RESEARCH.md)。
 - local baseline 与所有候选都不新增 Codec/Validator/Builder/UI，不改义 v3 droplet `ErosionConfig`，不创建
   私有 worldgen executor。只有获选的正式 runtime 完成 preview、性能和客户端门禁后才能开放 v4 参数。
@@ -321,6 +322,9 @@
 - 当前 `PerformanceBenchmarkTest` 的 5,000 次预热、50,000 次测量和平均 `ns/op` 只有 DCE guard，没有
   threshold、multi-fork、p50/p95、allocation、cache 或 JFR 门禁。它只能作为观测工具；P4.7 正式接线前
   必须建立 P4.6 smoke profile 的 cold/warm、chunk-like traversal、allocation 与四组合 JFR 基线。
+- 2026-07-23 已加入 24 次 full-column cold/warm 观测；一次完整 `:common:test` 在本机 JDK 21 记录
+  cold p50/p95 `2.115/3.872 ms`、warm p50/p95 `1.452/3.161 ms`，且 checksum 相同。这些数值只用于
+  追踪回归，不是跨硬件阈值；视觉和性能仍须在同一 fixture 与客户端矩阵中同时通过。
 - RTF droplet 可移植 gradient、inertia、capacity、erosion/deposition、evaporation 与 filter 顺序，但不能
   搬入 `Cell[]`、per-cell `int[][]/float[][]` brush、单尺寸 `WorldErosion`、私有 worldgen executor、对象池
   或 scheduled cache。ETF 候选使用 primitive SoA、canonical world-space tile/source、fixed halo 和有界

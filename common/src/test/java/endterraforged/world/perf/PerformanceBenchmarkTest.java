@@ -3,6 +3,7 @@ package endterraforged.world.perf;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.util.Arrays;
 import java.util.List;
 
 import org.junit.jupiter.api.AfterEach;
@@ -91,6 +92,7 @@ class PerformanceBenchmarkTest {
     private static final int P46_CHUNK_COLUMNS = 16 * 16;
     private static final int P46_WARMUP_CHUNKS = 1;
     private static final int P46_MEASURE_CHUNKS = 4;
+    private static final int P46_LATENCY_SAMPLES = 24;
     private static final float P46_BASE_X = 8192.0F;
     private static final float P46_BASE_Z = 8192.0F;
 
@@ -337,6 +339,61 @@ class PerformanceBenchmarkTest {
     }
 
     /**
+     * Records cold and warm full-column chunk latency percentiles for the P4.6
+     * fixture without treating a JUnit timer as an acceptance threshold.
+     *
+     * <p>A cold sample creates a new immutable {@link EndDensity} owner, which
+     * invalidates the calling worker's cache. A warm sample reuses one owner
+     * after one complete traversal. This captures the current cache lifecycle,
+     * not C2ME scheduling, allocations or client rendering.</p>
+     */
+    @Test
+    void p46SmokeDensityChunkLatencyBaseline() {
+        String property = EndPresetDevelopmentProfiles.P46_ARCHIPELAGO_SMOKE_TEST_PROPERTY;
+        String previous = System.getProperty(property);
+        System.setProperty(property, "true");
+        try {
+            EndPreset smoke = EndPresetDevelopmentProfiles.defaultFallback();
+            EndHeightmap heightmap = new EndHeightmap(smoke, P46_SMOKE_SEED);
+            long[] coldSamples = new long[P46_LATENCY_SAMPLES];
+            long[] warmSamples = new long[P46_LATENCY_SAMPLES];
+            long coldChecksum = 0L;
+            long warmChecksum = 0L;
+
+            for (int sample = 0; sample < P46_LATENCY_SAMPLES; sample++) {
+                EndDensity density = new EndDensity(heightmap);
+                long start = System.nanoTime();
+                coldChecksum += densityChunkChecksum(density);
+                coldSamples[sample] = System.nanoTime() - start;
+            }
+
+            EndDensity warmDensity = new EndDensity(heightmap);
+            densityChunkChecksum(warmDensity);
+            for (int sample = 0; sample < P46_LATENCY_SAMPLES; sample++) {
+                long start = System.nanoTime();
+                warmChecksum += densityChunkChecksum(warmDensity);
+                warmSamples[sample] = System.nanoTime() - start;
+            }
+
+            assertEquals(coldChecksum, warmChecksum,
+                    "cold and warm traversals must produce the same density bits");
+            System.out.printf(
+                    "[perf] p46SmokeDensityChunkLatency: cold p50=%.3f ms p95=%.3f ms, "
+                            + "warm p50=%.3f ms p95=%.3f ms%n",
+                    nanosToMillis(percentile(coldSamples, 0.50D)),
+                    nanosToMillis(percentile(coldSamples, 0.95D)),
+                    nanosToMillis(percentile(warmSamples, 0.50D)),
+                    nanosToMillis(percentile(warmSamples, 0.95D)));
+        } finally {
+            if (previous == null) {
+                System.clearProperty(property);
+            } else {
+                System.setProperty(property, previous);
+            }
+        }
+    }
+
+    /**
      * Final-density path for a continuous mainland with a solid floor and
      * the optional floating-island overlay enabled. This matches the shape
      * semantics of the legacy preset seen in the real-client baseline, while
@@ -461,6 +518,31 @@ class PerformanceBenchmarkTest {
             }
         }
         return checksum;
+    }
+
+    private static long densityChunkChecksum(EndDensity density) {
+        long checksum = 0L;
+        for (int column = 0; column < P46_CHUNK_COLUMNS; column++) {
+            float x = P46_BASE_X + (column & 15);
+            float z = P46_BASE_Z + (column >>> 4);
+            checksum += Float.floatToIntBits(density.density(x, -256, z, P46_SMOKE_SEED));
+            checksum += Float.floatToIntBits(density.density(x, -64, z, P46_SMOKE_SEED));
+            checksum += Float.floatToIntBits(density.density(x, 0, z, P46_SMOKE_SEED));
+            checksum += Float.floatToIntBits(density.density(x, 128, z, P46_SMOKE_SEED));
+            checksum += Float.floatToIntBits(density.density(x, 255, z, P46_SMOKE_SEED));
+        }
+        return checksum;
+    }
+
+    private static long percentile(long[] samples, double percentile) {
+        long[] sorted = samples.clone();
+        Arrays.sort(sorted);
+        int index = Math.min(sorted.length - 1, (int) Math.ceil(percentile * sorted.length) - 1);
+        return sorted[index];
+    }
+
+    private static double nanosToMillis(long nanos) {
+        return nanos / 1_000_000.0D;
     }
 
     private static int densityAndOverlayBits(

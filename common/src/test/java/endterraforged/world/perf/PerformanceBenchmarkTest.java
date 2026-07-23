@@ -21,8 +21,10 @@ import endterraforged.world.climate.EndClimate;
 import endterraforged.world.climate.EndClimateAccess;
 import endterraforged.world.config.ContinentConfig;
 import endterraforged.world.config.EndPreset;
+import endterraforged.world.config.EndPresetDevelopmentProfiles;
 import endterraforged.world.config.SeaMode;
 import endterraforged.world.config.TestProfile;
+import endterraforged.world.config.TerrainLayoutMode;
 import endterraforged.world.config.TopologyMode;
 import endterraforged.world.continent.Continent;
 import endterraforged.world.continent.ContinentSignalBuffer;
@@ -31,6 +33,7 @@ import endterraforged.world.continent.RtfMultiContinent;
 import endterraforged.world.floatingislands.FloatingIslandsField;
 import endterraforged.world.heightmap.EndDensity;
 import endterraforged.world.heightmap.EndHeightmap;
+import endterraforged.world.heightmap.EndTerrainProfileBuffer;
 import endterraforged.world.lake.EndLakeMap;
 import endterraforged.world.level.biome.BiomeSlot;
 import endterraforged.world.level.biome.BiomeVariant;
@@ -84,6 +87,12 @@ class PerformanceBenchmarkTest {
     private static final int MEASURE = 50_000;
 
     private static final int SEED = 42;
+    private static final int P46_SMOKE_SEED = 123456789;
+    private static final int P46_CHUNK_COLUMNS = 16 * 16;
+    private static final int P46_WARMUP_CHUNKS = 1;
+    private static final int P46_MEASURE_CHUNKS = 4;
+    private static final float P46_BASE_X = 8192.0F;
+    private static final float P46_BASE_Z = 8192.0F;
 
     @BeforeAll
     static void bootstrapMinecraft() {
@@ -271,6 +280,63 @@ class PerformanceBenchmarkTest {
     }
 
     /**
+     * Observes the first P4.7-0 fixture: the accepted P4.6 profile, a fixed
+     * outer-continent window, and chunk-like 16 x 16 profile traversal.
+     *
+     * <p>This is deliberately an observation rather than a performance gate.
+     * It records ordered and deterministic shuffled access costs while the
+     * cache counters, allocation sampling, full-column traversal and JFR
+     * matrix remain separate P4.7-0 work.</p>
+     */
+    @Test
+    void p46SmokeProfileChunkTraversalBaseline() {
+        String property = EndPresetDevelopmentProfiles.P46_ARCHIPELAGO_SMOKE_TEST_PROPERTY;
+        String previous = System.getProperty(property);
+        System.setProperty(property, "true");
+        try {
+            EndPreset smoke = EndPresetDevelopmentProfiles.defaultFallback();
+            assertEquals(TopologyMode.OUTER_CONTINENTS, smoke.topologyMode());
+            assertEquals(SeaMode.WITH_FLOOR, smoke.seaMode());
+            assertEquals(TerrainLayoutMode.REGION_PLANNED,
+                    smoke.terrainConfig().terrainLayoutMode());
+
+            EndHeightmap heightmap = new EndHeightmap(smoke, P46_SMOKE_SEED);
+            EndTerrainProfileBuffer profile = new EndTerrainProfileBuffer();
+            profileTraversal(heightmap, profile, P46_WARMUP_CHUNKS, false);
+            profileTraversal(heightmap, profile, P46_WARMUP_CHUNKS, true);
+
+            long orderedStart = System.nanoTime();
+            long orderedChecksum = profileTraversal(
+                    heightmap, profile, P46_MEASURE_CHUNKS, false);
+            long orderedElapsed = System.nanoTime() - orderedStart;
+
+            long shuffledStart = System.nanoTime();
+            long shuffledChecksum = profileTraversal(
+                    heightmap, profile, P46_MEASURE_CHUNKS, true);
+            long shuffledElapsed = System.nanoTime() - shuffledStart;
+
+            assertTrue(orderedChecksum != 0L, "DCE guard: ordered checksum must be non-zero");
+            assertTrue(shuffledChecksum != 0L, "DCE guard: shuffled checksum must be non-zero");
+            assertEquals(orderedChecksum, shuffledChecksum,
+                    "profile bits must be independent of column access order");
+            double samples = (double) P46_MEASURE_CHUNKS * P46_CHUNK_COLUMNS;
+            System.out.printf(
+                    "[perf] p46SmokeProfileChunkTraversal: ordered %.1f ns/profile, "
+                            + "shuffled %.1f ns/profile, checksum %d/%d%n",
+                    orderedElapsed / samples,
+                    shuffledElapsed / samples,
+                    orderedChecksum,
+                    shuffledChecksum);
+        } finally {
+            if (previous == null) {
+                System.clearProperty(property);
+            } else {
+                System.setProperty(property, previous);
+            }
+        }
+    }
+
+    /**
      * Final-density path for a continuous mainland with a solid floor and
      * the optional floating-island overlay enabled. This matches the shape
      * semantics of the legacy preset seen in the real-client baseline, while
@@ -373,6 +439,26 @@ class PerformanceBenchmarkTest {
             checksum += Float.floatToIntBits(signals.edge());
             checksum += Float.floatToIntBits(signals.landness());
             checksum += signals.continentId();
+        }
+        return checksum;
+    }
+
+    private static long profileTraversal(EndHeightmap heightmap,
+                                         EndTerrainProfileBuffer profile,
+                                         int chunks,
+                                         boolean shuffled) {
+        long checksum = 0L;
+        for (int chunk = 0; chunk < chunks; chunk++) {
+            for (int index = 0; index < P46_CHUNK_COLUMNS; index++) {
+                int column = shuffled ? ((index * 197 + 37) & 255) : index;
+                float x = P46_BASE_X + (column & 15);
+                float z = P46_BASE_Z + (column >>> 4);
+                heightmap.sampleTerrainProfile(x, z, P46_SMOKE_SEED, profile);
+                checksum += Float.floatToIntBits(profile.rawTop());
+                checksum += Float.floatToIntBits(profile.slope());
+                checksum += Float.floatToIntBits(profile.curvature());
+                checksum += profile.terrainTags();
+            }
         }
         return checksum;
     }

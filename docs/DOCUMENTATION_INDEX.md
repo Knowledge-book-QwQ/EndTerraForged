@@ -33,6 +33,7 @@
 | [`RTF_CORE_REUSE_RESEARCH.md`](RTF_CORE_REUSE_RESEARCH.md) | RTF MIT 大陆、地貌区域、地貌族、形状化特征、群岛与侵蚀复用，以及 ETF 高质量地表重构规格 | RTF 地表复用边界或阶段 B 实现决策改变时更新 |
 | [`P4_7_EROSION_ALGORITHM_RESEARCH.md`](P4_7_EROSION_ALGORITHM_RESEARCH.md) | P4.7 论文、开源仓库、许可证、候选矩阵、统一 benchmark、缓存与 JFR 性能架构 | 算法候选、上游许可/成熟度或 P4.7 选型改变时更新；当前尚未选定正式算法 |
 | [`P4_7_ANALYTICAL_EROSION_SPEC.md`](P4_7_ANALYTICAL_EROSION_SPEC.md) | P4.7 低成本 local analytical baseline 的 runtime API、量纲、零影响边界、缓存、preview 与验收门禁 | baseline 契约改变时更新；不代表正式算法已选定，runtime 待实现 |
+| [`reviews/P4_7_BASELINE_2026-07-23.md`](reviews/P4_7_BASELINE_2026-07-23.md) | P4.7-0 smoke-profile traversal 的首个可重复观测与限制 | 每次基线观测或门禁范围改变时新增/更新 |
 | [`ETF_TO_RTF_IMPROVEMENT_TRACKER.md`](ETF_TO_RTF_IMPROVEMENT_TRACKER.md) | ETF 中发现、验证并准备人工回送 RTF 的改进事项唯一状态台账 | 每次发现通用改进、RTF 状态变化或完成迁移时更新；不得从 ETF 任务直接修改 RTF |
 | [`TALL_WORLD_OPTIMIZATION_REVIEW.md`](TALL_WORLD_OPTIMIZATION_REVIEW.md) | 高世界、热路径、C2ME 与精确空 cell 优化审查 | 性能架构或基准结论改变时更新 |
 | [`CONTENT_PACK_SPEC.md`](CONTENT_PACK_SPEC.md) | ETF Worldgen Content Pack API v1 当前规格 | Content Pack 契约改变时更新；当前待实现 |

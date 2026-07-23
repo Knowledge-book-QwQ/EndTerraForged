@@ -328,6 +328,11 @@
 - P4.7 候选算法的 canonical test artifact 固定为 33 x 33 primitive grid、2-cell halo、4-block sample
   distance 和 Standard 512 derivative scale。fixture 同时携带 raw top、landness、inlandness、available
   thickness 与 archipelago-dominant gate；候选不得各自替换输入、halo 或采样尺度来取得更好结果。
+- 2026-07-23 新增 `EndAnalyticalErosionRuntime` 作为候选 baseline：immutable、无 world/cache/executor，
+  只写 caller-owned buffer；ridge 只做保护，basin 只输出 drainage potential，首批不挖排水几何。中央
+  activation、低 landness、薄 shelf 与 archipelago-dominant 列必须零影响；该 runtime 尚未接入 `EndDensity`。
+  同一 canonical fixture 的一次完整 common 测试为 `39.1 ns/sample`，仅代表 local primitive 成本，不能
+  代替列缓存、C2ME、JFR 或客户端性能证据。
 - RTF droplet 可移植 gradient、inertia、capacity、erosion/deposition、evaporation 与 filter 顺序，但不能
   搬入 `Cell[]`、per-cell `int[][]/float[][]` brush、单尺寸 `WorldErosion`、私有 worldgen executor、对象池
   或 scheduled cache。ETF 候选使用 primitive SoA、canonical world-space tile/source、fixed halo 和有界

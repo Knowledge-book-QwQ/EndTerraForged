@@ -607,7 +607,7 @@ public final class EndHeightmap {
         float laplacian = (east + west + south + north - 4.0F * centre)
                 * worldHeight / (distance * distance);
         float curvature = laplacian / (1.0F + Math.abs(laplacian));
-        output.set(centre, slope, curvature, signals);
+        output.set(centre, worldHeight, slope, curvature, signals);
     }
 
     private float auxiliaryContribution(float x, float z, int seed, float landness, float inlandness) {

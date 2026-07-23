@@ -67,6 +67,8 @@ class EndTerrainProfileTest {
 
         assertEquals(standardProfile.slope(), tallProfile.slope(), 1.0E-5F);
         assertEquals(standardProfile.curvature(), tallProfile.curvature(), 1.0E-5F);
+        assertEquals(512.0F, standardProfile.worldHeightBlocks(), 0.0F);
+        assertEquals(1024.0F, tallProfile.worldHeightBlocks(), 0.0F);
         assertTrue(standardProfile.slope() > 0.0F);
         assertTrue(standardProfile.curvature() > 0.0F);
     }

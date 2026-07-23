@@ -21,15 +21,17 @@ package endterraforged.world.heightmap;
  */
 public final class EndTerrainProfileBuffer {
     private float rawTop;
+    private float worldHeightBlocks;
     private float slope;
     private float curvature;
     private float roughness;
     private float erosionResistance;
     private int terrainTags;
 
-    void set(float rawTop, float slope, float curvature,
+    void set(float rawTop, float worldHeightBlocks, float slope, float curvature,
              EndTerrainSignalBuffer signals) {
         this.rawTop = rawTop;
+        this.worldHeightBlocks = worldHeightBlocks;
         this.slope = slope;
         this.curvature = curvature;
         this.roughness = signals.roughness();
@@ -39,6 +41,11 @@ public final class EndTerrainProfileBuffer {
 
     public float rawTop() {
         return this.rawTop;
+    }
+
+    /** Returns the actual loaded dimension height used to normalize {@link #rawTop()}. */
+    public float worldHeightBlocks() {
+        return this.worldHeightBlocks;
     }
 
     public float slope() {

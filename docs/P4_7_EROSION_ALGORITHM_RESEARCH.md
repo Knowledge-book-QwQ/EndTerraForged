@@ -1,7 +1,7 @@
 # P4.7 侵蚀、排水与性能方案调研
 
 > 文档状态：当前有效，算法选型调研；不代表 runtime 已实现。
-> 最近更新：2026-07-22。
+> 最近更新：2026-07-23。
 > 调研时间点：仓库、许可证和维护状态均以 2026-07-22 的上游事实为准。
 > 实现契约见 [`P4_7_ANALYTICAL_EROSION_SPEC.md`](P4_7_ANALYTICAL_EROSION_SPEC.md)。
 
@@ -65,7 +65,7 @@ raw top + ownership/thickness/protection masks
 
 `EndHeightmap.sampleTerrainProfile()` 当前先采样一次 terrain signals，再分别采样 centre、east、west、
 south 和 north 五个 raw top。进入 `REGION_PLANNED` 后，每个 raw top 都可能包含大陆、AREA region、
-Top-3 ridge、uplift 和 archipelago 数学。直接在每个 density 列调用该 API，等价于把高质量地貌链
+Top-3 ridge 和 archipelago 数学。直接在每个 density 列调用该 API，等价于把高质量地貌链
 至少重复五次。
 
 此外，当前 slope/curvature 直接对归一化 top 求差，没有先乘 `worldHeight`；这会使 Standard 与高世界
@@ -117,7 +117,8 @@ multigrid accelerated iterative process。它不是可在任意 X/Z 独立求值
 对 ETF 的意义：
 
 - 视觉和地质一致性潜力最高，适合高质量 CPU tile 候选。
-- 可把 uplift、年龄、侵蚀抗性组织成清晰信号，比无方向局部削坡更符合 ETF 地貌架构。
+- 可把地貌年龄、侵蚀抗性和排水方向组织成清晰信号，比无方向局部削坡更符合 ETF 地貌架构；
+  ETF 不采用中心距离 uplift map。
 - 必须先验证 canonical tile、halo、multigrid 边界条件、首块延迟和 worker 重复计算。
 - 本轮没有找到作者公开的对应实现仓库，当前只能依据论文独立实现，不可假设已有可复制代码。
 
@@ -138,19 +139,19 @@ patch 与 carving/blending 合成连续地形。它提示 ETF 不必让“河流
 - 论文面向输入 domain 和 construction tree，仍需重新设计为任意区块访问与有界局部搜索。
 - GitHub 上的少量第三方 Python 复现成熟度低，不作为实现来源。
 
-### 4.3 uplift + stream-power graph
+### 4.3 uplift + stream-power graph（论文参考，ETF 不采用 uplift map）
 
 Cordonnier 等，
 [Large Scale Terrain Generation from Tectonic Uplift and Fluvial Erosion](https://doi.org/10.1111/cgf.12820)，
 Computer Graphics Forum 2016；[HAL 记录](https://inria.hal.science/hal-01262376)。
 
-该方案从 uplift map 构建包含 elevation 与 flow 的全域 stream graph，使用 stream-power equation，
+该方案从 tectonic uplift map 构建包含 elevation 与 flow 的全域 stream graph，使用 stream-power equation，
 再以 landform kernels 合成 DEM。它能直接组织 dendritic river、watershed 和 mountain ridge。
 
 对 ETF 的意义：
 
-- ETF 已有独立 uplift 信号，这是比纯 droplet 更自然的长期方向。
-- 最有价值的是“宏观 graph 决定排水，局部 kernel 决定剖面”的分层，而非复制全域数据结构。
+- ETF 不保留独立 uplift 信号，也不把中心距离作为地表先验。可复用的只有“宏观 graph 决定排水，
+  局部 kernel 决定剖面”的分层；graph 必须从最终 terrain top、landness 和 finite volume 推导。
 - 全域 graph 不能直接用于无限 Minecraft 世界；需要按 continent/canonical region 生成稳定子图，
   并证明相邻 region 的 outlet 协议一致。
 
@@ -270,7 +271,7 @@ ETF 原型应使用 primitive structure-of-arrays：`height[]`、`delta[]`、`wa
 - raw top blocks。
 - landness、inlandness、outer activation、available thickness。
 - AREA family、roughness、erosion resistance 和 terrain tags。
-- RIDGE influence/crest mask、uplift、archipelago dominant mask。
+- RIDGE influence/crest mask、archipelago dominant mask。
 
 至少固定以下图形和真实 seed fixture：flat、plane、paraboloid、isolated spike、finite ridge、plateau
 edge、closed basin、two-outlet watershed、coast、thin shelf、archipelago，以及 seed `123456789` 的

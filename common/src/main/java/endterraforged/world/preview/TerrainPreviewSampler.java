@@ -142,9 +142,6 @@ public final class TerrainPreviewSampler {
                 float temperature = climate.getTemperature(worldX, worldZ, seed);
                 float moisture = climate.getMoisture(worldX, worldZ, seed);
                 float wind = climate.getWind(worldX, worldZ, seed);
-                float uplift = settings.mode() == TerrainPreviewMode.UPLIFT
-                        ? heightmap.getUplift(worldX, worldZ, seed)
-                        : 0.0F;
                 min = Math.min(min, height);
                 max = Math.max(max, height);
                 if (TerrainPreviewPalette.isVisibleLand(landness)) {
@@ -156,7 +153,7 @@ public final class TerrainPreviewSampler {
                 colors[z * size + x] = color(
                         preset, landmassVolume, landness, height, terrainTop, blend, settings.mode(),
                         temperature, moisture, wind, worldX, worldZ,
-                        biomePreviewLayout, subsurface, caveMask, caveGraphMask, caveField, uplift,
+                        biomePreviewLayout, subsurface, caveMask, caveGraphMask, caveField,
                         landmassSignals.mainlandLandness(), landmassSignals.archipelagoMask(),
                         landmassSignals.archipelagoLandness());
             }
@@ -237,7 +234,7 @@ public final class TerrainPreviewSampler {
                              BiomePreviewLayout biomePreviewLayout, EndSubsurface subsurface,
                              EndCavePreviewMask caveMask,
                              EndCaveGraphPreviewMask caveGraphMask,
-                             EndCaveField caveField, float uplift,
+                             EndCaveField caveField,
                              float mainlandLandness, float archipelagoMask,
                              float archipelagoLandness) {
         if (mode == TerrainPreviewMode.BIOMES) {
@@ -295,7 +292,7 @@ public final class TerrainPreviewSampler {
                     subsurface.abyssStrength(worldX, worldZ, landness));
         }
         return TerrainPreviewPalette.color(landness, height, blend, mode,
-                temperature, moisture, wind, uplift);
+                temperature, moisture, wind);
     }
 
     /**

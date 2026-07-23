@@ -152,6 +152,15 @@ class ContinentConfigCodecTest {
         assertTrue(result.error().orElseThrow().message().contains("algorithm"));
     }
 
+    @Test
+    void removedUpliftAlgorithmFailsDecodeAsUnknownEnum() {
+        JsonObject json = new JsonObject();
+        json.addProperty("algorithm", "RTF_UPLIFT_EXPERIMENTAL");
+        DataResult<ContinentConfig> result = ContinentConfig.CODEC.parse(JsonOps.INSTANCE, json);
+        assertTrue(result.error().isPresent());
+        assertTrue(result.error().orElseThrow().message().contains("Unknown ContinentAlgorithm"));
+    }
+
     private static ContinentConfig decode(JsonElement json) {
         DataResult<ContinentConfig> result = ContinentConfig.CODEC.parse(JsonOps.INSTANCE, json);
         return result.result().orElseThrow(() ->

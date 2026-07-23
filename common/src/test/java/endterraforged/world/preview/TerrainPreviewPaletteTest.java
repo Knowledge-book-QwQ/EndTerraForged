@@ -159,16 +159,6 @@ class TerrainPreviewPaletteTest {
     }
 
     @Test
-    void upliftColorsTrackTheMacroReliefSignal() {
-        int low = TerrainPreviewPalette.upliftColor(1.0F, 0.0F);
-        int high = TerrainPreviewPalette.upliftColor(1.0F, 1.0F);
-        int voidColor = TerrainPreviewPalette.upliftColor(0.0F, 1.0F);
-
-        assertTrue(low != high);
-        assertEquals(TerrainPreviewPalette.upliftColor(0.0F, 0.0F), voidColor);
-    }
-
-    @Test
     void biomeClimateColorsTrackRingTemperatureAndMoistureBands() {
         int coldDryHighlands = TerrainPreviewPalette.biomeClimateColor(1.0F,
                 EndBiomeLayout.Ring.HIGHLANDS, 0.1F, 0.1F);

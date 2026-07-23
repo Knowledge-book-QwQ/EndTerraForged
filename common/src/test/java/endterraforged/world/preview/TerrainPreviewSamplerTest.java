@@ -98,20 +98,6 @@ class TerrainPreviewSamplerTest {
     }
 
     @Test
-    void upliftPreviewUsesTheDeterministicRuntimeSignal() {
-        EndPreset preset = EndPreset.defaults();
-        TerrainPreview first = TerrainPreviewSampler.sample(preset, 7, 48, 32,
-                TerrainPreviewMode.UPLIFT);
-        TerrainPreview second = TerrainPreviewSampler.sample(preset, 7, 48, 32,
-                TerrainPreviewMode.UPLIFT);
-
-        assertEquals(signature(first), signature(second));
-        assertTrue(first.layerStats().total() > 0);
-        assertTrue(java.util.Arrays.stream(first.colors()).distinct().count() > 1,
-                "uplift preview must expose more than a single flat color");
-    }
-
-    @Test
     void organicCoastChangesOuterLandnessPreviewSignature() {
         EndPreset organic = legacyOuterPreset();
         EndPreset radialLegacy = new EndPresetBuilder(organic)

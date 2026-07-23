@@ -28,7 +28,7 @@
 - RTF R9.3.6 作为参数、默认值和配置语义基线；RTF R9.6 作为稳定核心实现基线。RTF 是同一维护方的 MIT 项目，无平台/注册表/`GeneratorContext`/`Cell`/水位/河流缓存耦合的纯数学可直接移植，但必须保留版权头、记录来源与 ETF 改动并更新 `NOTICE.md`。
 - 不复制 RTF UI 设计、布局结构或视觉呈现。
 - 地下系统不走 RTF 洞穴方案，改用 EndTerraForged 自研的庞大洞穴、裂隙、深渊与垂直剖面路线。
-- 当前最高优先级是先完成最新 jar 的中央保护、底面、直壁、岩浆、RTF/C2ME 短回归，再按 `RTF_ADVANCED -> TerrainRegionPlan -> 地貌族 -> ridge/compact 山脉火山 -> uplift -> 群岛海岸 -> 侵蚀排水 -> preview/UI -> 性能兼容` 重建阶段 B 高质量地表。当前 `EndTerrainComposer` 的单一 selector + 通用噪声层只是 legacy 原型，不再继续大段修补；原版主岛和外围区域仍冻结到最后阶段。
+- 当前最高优先级是先完成最新 jar 的中央保护、底面、直壁、岩浆、RTF/C2ME 短回归，再按 `RTF_ADVANCED -> TerrainRegionPlan -> 地貌族 -> ridge/compact 山脉火山 -> 群岛海岸 -> 侵蚀排水 -> preview/UI -> 性能兼容` 重建阶段 B 高质量地表。中心距离抬升整体大陆的设计已否决，不得以别的名称或公式重新引入。当前 `EndTerrainComposer` 的单一 selector + 通用噪声层只是 legacy 原型，不再继续大段修补；原版主岛和外围区域仍冻结到最后阶段。
 - ETF Worldgen Content Pack API 负责 biome、Content Profile、surface palette 和 feature 扩展；外部 generator 不得与 ETF 同时接管 End density。
 - Terra/ReimagEND 只通过独立内容适配包兼容，不在 core 中实现通用 Terra 解释器或复制 GPL 内容。
 

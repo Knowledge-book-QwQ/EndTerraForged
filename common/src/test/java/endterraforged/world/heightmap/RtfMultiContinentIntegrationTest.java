@@ -13,6 +13,9 @@ import endterraforged.world.config.ContinentConfig;
 import endterraforged.world.config.ContinentConfigBuilder;
 import endterraforged.world.config.EndPreset;
 import endterraforged.world.config.EndPresetBuilder;
+import endterraforged.world.config.TerrainConfig;
+import endterraforged.world.config.TerrainLayerConfig;
+import endterraforged.world.config.TerrainLayoutMode;
 import endterraforged.world.continent.BandedContinent;
 import endterraforged.world.continent.ContinentSignals;
 import endterraforged.world.continent.EndCentralRegionPolicy;
@@ -87,20 +90,16 @@ class RtfMultiContinentIntegrationTest {
     }
 
     @Test
-    void upliftSignalSharesTheContinentSamplingPath() {
-        EndHeightmap heightmap = new EndHeightmap(rtfPreset(), 123456789);
-        EndTerrainSignalBuffer output = new EndTerrainSignalBuffer();
-        boolean sawUplift = false;
+    void regionPlannedTerrainDoesNotDependOnContinentCentreDistance() {
+        EndHeightmap heightmap = new EndHeightmap(regionPlannedRtfPreset(), 123456789);
+        EndLandmassSignalBuffer nearbyCentre = identifiedLandmass(0, 0);
+        EndLandmassSignalBuffer remoteCentre = identifiedLandmass(50000, -50000);
 
-        for (int z = -16000; z <= 16000; z += 256) {
-            for (int x = -16000; x <= 16000; x += 256) {
-                heightmap.sampleTerrainSignals(x, z, 123456789, output);
-                assertEquals(heightmap.getUplift(x, z, 123456789), output.uplift(), 0.0F);
-                sawUplift |= output.uplift() > 0.05F;
-            }
-        }
+        float nearby = heightmap.getTerrainHeight(8192.0F, 8192.0F, 123456789, nearbyCentre);
+        float remote = heightmap.getTerrainHeight(8192.0F, 8192.0F, 123456789, remoteCentre);
 
-        assertTrue(sawUplift, "RTF continent samples must expose a non-zero interior uplift signal");
+        assertEquals(nearby, remote, 0.0F,
+                "continent centre distance must not attenuate REGION_PLANNED terrain");
     }
 
     @Test
@@ -135,6 +134,29 @@ class RtfMultiContinentIntegrationTest {
                 defaults.islandBaselineY(), defaults.seaMode(), defaults.topologyMode(),
                 defaults.floatingIslandsEnabled(), config, defaults.terrainConfig(), defaults.climateConfig(),
                 defaults.biomeLayoutConfig(), defaults.subsurfaceConfig(), defaults.erosionConfig(), 2);
+    }
+
+    private static EndPreset regionPlannedRtfPreset() {
+        EndPreset base = rtfPreset();
+        TerrainConfig source = base.terrainConfig();
+        TerrainConfig terrain = new TerrainConfig(
+                source.terrainSeedOffset(), source.terrainRegionSize(),
+                source.globalVerticalScale(), source.globalHorizontalScale(),
+                source.terrainBlendRange(), TerrainLayoutMode.REGION_PLANNED,
+                source.terrainShape(), TerrainLayerConfig.DEFAULT, TerrainLayerConfig.DEFAULT,
+                TerrainLayerConfig.DEFAULT, TerrainLayerConfig.DEFAULT, TerrainLayerConfig.DISABLED);
+        return new EndPreset(
+                base.worldHeight(), base.minY(), base.seaLevelY(), base.islandBaselineY(),
+                base.seaMode(), base.topologyMode(), base.floatingIslandsEnabled(),
+                base.continentConfig(), terrain, base.climateConfig(), base.biomeLayoutConfig(),
+                base.subsurfaceConfig(), base.erosionConfig(), 4);
+    }
+
+    private static EndLandmassSignalBuffer identifiedLandmass(int centerX, int centerZ) {
+        EndLandmassSignalBuffer signals = new EndLandmassSignalBuffer();
+        signals.continentSignals().setIdentified(0.9F, 0.9F, 0.9F, 7L, centerX, centerZ);
+        signals.combine();
+        return signals;
     }
 
     private static boolean hasLandInOuterCorridor(EndHeightmap heightmap, int seed, int directionX, int directionZ) {

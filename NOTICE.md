@@ -14,7 +14,7 @@ EndTerraForged 以 LGPL-3.0-or-later 协议开源，详见 `LICENSE`。
 - 当前 RTF 开发分支：只读用于审查 terrain region、shape-aware placement、volcano
   morphology 与性能改进；这些开发中能力必须在 ETF 独立验证后才能移植或默认启用。
 - RTF 地表核心复用方案以标签 `R9.3.6` / `R9.6` 的 `ContinentGenerator`、
-  `AdvancedContinentGenerator`、`UpliftContinentGenerator`、`ArchipelagoPopulator`
+  `AdvancedContinentGenerator`、`ArchipelagoPopulator`
   和 terrain shape primitive 为主要来源。无平台、注册表、`GeneratorContext`、`Cell`、
   水位或 river cache 耦合的 MIT 纯数学可以直接移植；实际源码进入 ETF 时，必须在对应
   文件保留版权头并在本文件追加具体类与修改说明。
@@ -66,13 +66,6 @@ R9.6 的用户界面设计、布局结构和视觉呈现不会被复制。
   `Cell`、`Resource<Cell>`、river cache 与主世界控制点外壳。当前已受控接入
    `EndHeightmap`、有限大陆体积和 preview 的集成测试路径，但 validator、Codec 与编辑器
    仍拒绝该算法，因此尚未成为正式 preset 或玩家可选 runtime。
-- `common/src/main/java/endterraforged/world/heightmap/EndTerrainUpliftRuntime.java`
-  参考 ReTerraForged `R9.3.6` / `R9.6` 的
-  `raccoonman.reterraforged.world.worldgen.cell.continent.uplift.UpliftContinentGenerator`
-  中平滑 Voronoi gradient 与 corrected-centroid uplift 语义。ETF 只保留独立 `[0,1]`
-  宏观 scalar，改用已有 `ContinentSignalBuffer` 的 owner centre、edge、landness 和
-  inlandness；删除 `Cell`、water table、river cache、worldgen context 与主世界耦合，并通过
-  `REGION_PLANNED + RTF` 实验路径和 preview 消费。该类是 ETF 的独立改写，不复制 RTF UI。
 - `common/src/main/java/endterraforged/world/terrain/TerrainRegionLayout.java`、
   `TerrainRegionBuffer.java` 与 `TerrainRegionPlan.java` 改写自当前 ReTerraForged 开发线的
   `UnifiedTerrainRegionLayout`、`RegionEdgeValue` 与相关候选选择数学。保留 warped Voronoi、

@@ -22,8 +22,6 @@ public final class TerrainPreviewPalette {
     private static final int MID_COLOR = 0xFF6E8156;
     private static final int HIGH_COLOR = 0xFFD6D2B0;
     private static final int LAND_COLOR = 0xFF9DD8A1;
-    private static final int UPLIFT_LOW = 0xFF334B64;
-    private static final int UPLIFT_HIGH = 0xFFE2C36A;
     private static final int ARCHIPELAGO_MAINLAND = 0xFF355B50;
     private static final int ARCHIPELAGO_SHELF = 0xFF3D8293;
     private static final int ARCHIPELAGO_COAST = 0xFF77AA78;
@@ -85,19 +83,12 @@ public final class TerrainPreviewPalette {
 
     public static int color(float landness, float height,
                             EndTerrainBlend blend, TerrainPreviewMode mode) {
-        return color(landness, height, blend, mode, 0.0F, 0.0F, 0.0F, 0.0F);
+        return color(landness, height, blend, mode, 0.0F, 0.0F, 0.0F);
     }
 
     public static int color(float landness, float height,
                             EndTerrainBlend blend, TerrainPreviewMode mode,
                             float temperature, float moisture, float wind) {
-        return color(landness, height, blend, mode, temperature, moisture, wind, 0.0F);
-    }
-
-    public static int color(float landness, float height,
-                            EndTerrainBlend blend, TerrainPreviewMode mode,
-                            float temperature, float moisture, float wind,
-                            float uplift) {
         Objects.requireNonNull(blend, "blend");
         Objects.requireNonNull(mode, "mode");
         return switch (mode) {
@@ -105,7 +96,6 @@ public final class TerrainPreviewPalette {
             case HEIGHT -> heightColor(landness, height);
             case LANDNESS -> landnessColor(landness);
             case ARCHIPELAGO -> archipelagoColor(landness, 0.0F, 0.0F);
-            case UPLIFT -> upliftColor(landness, uplift);
             case VOLUME -> volumeColor(landness, false, 0.0F);
             case LAYERS -> layerMapColor(landness, blend);
             case BIOMES -> biomeColor(landness, 0);
@@ -205,13 +195,6 @@ public final class TerrainPreviewPalette {
             return lerp(ABYSS_RIM, ABYSS_SHELF, (mask - 0.55F) / 0.30F);
         }
         return lerp(ABYSS_SHELF, ABYSS_CORE, (mask - 0.85F) / 0.15F);
-    }
-
-    public static int upliftColor(float landness, float uplift) {
-        if (!isVisibleLand(landness)) {
-            return VOID_COLOR;
-        }
-        return lerp(UPLIFT_LOW, UPLIFT_HIGH, NoiseMath.clamp(uplift, 0.0F, 1.0F));
     }
 
     /** Colors the runtime archipelago bands and mainland-overlap bridge candidates. */

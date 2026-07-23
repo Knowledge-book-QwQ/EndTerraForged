@@ -144,7 +144,7 @@ flowchart TD
     R --> S["Ridge / compact structured features"]
     F --> H["Raw terrain top"]
     S --> H
-    C --> U["Uplift / archipelago"]
+    C --> U["Archipelago / coast"]
     U --> H
     H --> E["Erosion / drainage"]
     E --> V["EndLandmassVolume"]
@@ -161,7 +161,7 @@ flowchart TD
 4. **Terrain region plan**：用不可变、零热路径分配的 AREA ownership 布局输出 region id、center、edge、ownership family、边界 family、blend 与 orientation。全部正权重 AREA family 参加同一个无空洞分区；AREA `weight` 表示近似面积占比，独立 region scale 只改变重复区域尺寸，搜索必须有界并可早停。
 5. **Base terrain families**：平原、丘陵、高原和 AREA 山地等固定核心 family 只输出 height、roughness、erosion resistance 和 terrain tags。同一 ownership region 可按 seed/region/family 选择稳定 morphology variant；family 不访问 registry、Content Pack 或 Minecraft 平台 API。
 6. **Shape-aware morphology**：RIDGE 使用独立、确定性、有界 anchor overlay，不参与宏观 ownership。每点最多组合三个候选，relief 取最大值，最强 physical influence 决定可见 identity 和信号元数据；footprint 外严格保留真实 AREA owner 与信号。COMPACT 火山在当前阶段冻结，后续另行定义 ownership 与末地体积语义。
-7. **Uplift / archipelago**：uplift 只提供宏观 relief envelope；附属群岛使用大陆 edge 与同一 volume，不生成海床，也不复用高空浮岛系统。
+7. **Archipelago / coast**：附属群岛使用大陆 edge 与同一 volume，不生成海床，也不复用高空浮岛系统；不按大陆中心距离额外抬升整体地形。
 8. **Erosion / drainage**：先对稳定 raw top 做 analytical erosion；高成本 hydraulic tile 只能区域对齐、带 border、worker-owned 且有界缓存。侵蚀不重新选择大陆或 terrain family。
 9. **Vertical volume**：`EndLandmassVolume` 把最终 top surface 与大陆 underside 组合为真实浮空体积。`FLOATING_SHELF` 先按 landness 平滑插值得到边缘/主体厚度，再乘同一 `edgeFade`，使厚度在 void 边界收敛到零而不是形成实体直壁；新默认使用有限 shelf，只有显式/迁移的 `LEGACY_COLUMN` 才继续按 SeaMode 填充整列。underside 是 column cache 的一部分，不能在每个 density Y 采样中重复计算。
 10. **Subsurface carve**：在实体体积中切削深渊和洞穴。

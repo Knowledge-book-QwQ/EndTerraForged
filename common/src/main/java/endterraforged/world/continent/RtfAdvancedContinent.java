@@ -26,7 +26,8 @@ import endterraforged.world.noise.domain.Domains;
  *
  * <p>The implementation preserves the R9.3.6/R9.6 seed sequence, two-pass
  * Voronoi search, perpendicular-bisector distance, per-cell size variance,
- * corrected centre and cliff/bay coast shaping. It is wired into the internal
+ * corrected centre metadata and cliff/bay coast shaping. The corrected centre
+ * is never consumed as a terrain-height envelope. It is wired into the internal
  * heightmap and preview assembly for integration tests, but remains unavailable
  * to persisted presets and the editor until P4.0 client compatibility and the
  * complete P4.1 performance gates pass.</p>

@@ -1,7 +1,7 @@
 # EndTerraForged 长期目标与阶段目标
 
 > 文档状态：当前有效，目标模式唯一入口。
-> 最近更新：2026-07-15。
+> 最近更新：2026-07-23。
 > 权威范围：产品目标、阶段顺序、完成定义和执行门禁。
 > 当前任务与短期顺序以 [`PLAN.md`](PLAN.md) 为准；工程规则以 [`AGENTS.md`](AGENTS.md) 为准。
 
@@ -191,7 +191,8 @@ C2ME 兼容的最低要求：没有依赖线程顺序的随机数，没有跨 wo
 - 山脉使用 AREA ownership 上的有限山脊；高原、丘陵和其他地貌拥有各自成熟的形态函数。火山的有限紧凑 footprint 只属于后续独立阶段。物理影响在 footprint 外严格归零并回到 underlay，所有地貌不得在每个坐标全局叠加。
 - `FLOATING_SHELF` 可生成多个大型大陆，边缘、厚度、海峡、附属群岛和离岸岛链均可配置并预览；附属群岛与高空浮岛是两套独立系统。
 - 正式大陆具有 top、underside 和 edge thickness，不从地表无条件填充到世界底部。
-- uplift、海岸分带、群岛、侵蚀和排水必须消费同一套大陆/地貌区域信号；不得维护与正式 runtime 分叉的第二套公式。
+- 海岸分带、群岛、侵蚀和排水必须消费同一套大陆/地貌区域信号；不得按大陆中心距离额外
+  生成宏观抬升穹顶，也不得维护与正式 runtime 分叉的第二套公式。
 - 高 relief 地貌必须经过 `EndTerrainEligibilityPolicy`：在 shelf/rim、厚度不足或
   void edge 处只缩放物理形态或回到 underlay，不改变 continent/region/ownership identity。
 - 地表后处理顺序固定为 raw top -> erosion -> smoothing -> slope/curvature/edge metrics
@@ -302,7 +303,7 @@ C2ME 兼容的最低要求：没有依赖线程顺序的随机数，没有跨 wo
 
 - 当前版本：`0.1.7` 开发工作树。
 - 当前阶段：阶段 B 的 P2 外部大陆与 P3 有限大陆架已形成代码闭环，但当前地表仍只是原型。`EndTerrainComposer` 主要依赖一个低频选择噪声在若干通用层之间切换，缺少区域级地貌规划、成熟地貌族和有限形状特征，因此不能把现有截图质量视为可继续微调的最终架构。
-- 当前执行顺序：先完成最新 jar 的中央保护、底面、直壁、岩浆、RTF/C2ME 同载短回归；地表重建随后按“AREA 地貌族与资格策略 -> 曲线/多段山系 -> 非径向宏观 uplift -> 附属群岛与海岸 -> analytical erosion/排水 -> 预览调度和编辑器 -> 性能兼容”的顺序推进。火山不再是 0.2.0 首个垂直切片的前置条件；只有完成独立地质设计、固定 seed 视觉验收和性能预算后才单列进入后续版本。每一层先完成正式 runtime，再接预览，最后才开放玩家 UI。
+- 当前执行顺序：先完成最新 jar 的中央保护、底面、直壁、岩浆、RTF/C2ME 同载短回归；地表重建随后按“AREA 地貌族与资格策略 -> 曲线/多段山系 -> 附属群岛与海岸 -> analytical erosion/排水 -> 预览调度和编辑器 -> 性能兼容”的顺序推进。火山不再是 0.2.0 首个垂直切片的前置条件；只有完成独立地质设计、固定 seed 视觉验收和性能预算后才单列进入后续版本。每一层先完成正式 runtime，再接预览，最后才开放玩家 UI。
 - 当前代码状态：`RTF_ADVANCED` 的纯数学、`Perlin2`、golden fixture、完整大陆信号以及
   受控 `EndHeightmap` / finite volume / preview 内部接线已经完成，并通过 common、双平台
   编译和发布包自动门禁；但 validator、Codec 和编辑器仍明确拒绝该算法，真实客户端、
@@ -322,7 +323,7 @@ C2ME 兼容的最低要求：没有依赖线程顺序的随机数，没有跨 wo
   `RiverCache`、私有 worldgen executor、全局可变 biome cache、独占 Mixin、RTF UI 或
   RTF cave。
 - 交付策略：不把 RTF 的所有地貌一次性搬入。`0.2.0` 先以平原/丘陵/高原、有限山系、
-  非径向 uplift、群岛海岸和 analytical erosion 构成一个完整垂直切片；火山、badlands、
+  群岛海岸和 analytical erosion 构成一个完整垂直切片；中心抬升穹顶明确不属于 ETF 路线；火山、badlands、
   torridonian、hydraulic erosion、复杂火山流槽、动态世界规格和 3D 旋转预览均在该切片
   通过真实客户端、JFR 与兼容矩阵后再扩展。
 - 预计剩余工作量：约 28-40 个大段开发轮次，取决于高质量地表重建、真实客户端回归、Content Pack、C2ME/整合包兼容结果、宏大地下系统收束以及 3D 预览是否进入首个稳定版本。

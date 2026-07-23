@@ -73,7 +73,7 @@ ETF 当前任务优先级仍以 `PLAN.md` 为准；反哺项只有进入独立 R
 | `FB-005` | P1 | `OBSERVED` | worldgen 调度权与线程预算 | RTF 有共享私有 executor，可能与 C2ME 争用 | 先做 C2ME/非 C2ME JFR，不凭理论重构 |
 | `FB-006` | P0 | `READY_FOR_RTF_REVIEW` | ETF+RTF+C2ME 交叉兼容门禁 | 单仓测试无法复现两个模组争用同一 Mixin 点 | 建立固定版本、seed、坐标和方块 hash 协议 |
 | `FB-007` | P2 | `OBSERVED` | density graph 代数与精确空 cell 证明 | 存在高世界性能压力，但错误剪枝会损坏地形 | 只做离线等价审查和最终 cell 实验 |
-| `FB-008` | P2 | `ETF_PROVEN` | uplift 纯 scalar 与 Cell 解耦 | RTF uplift 仍同时承担 Cell 写入、water table 和上下文职责 | 在 RTF 独立轮次评估可选的纯 uplift helper |
+| `FB-008` | P2 | `REJECTED` | 中心距离 uplift 不适合作为 ETF 地表层 | RTF uplift 仍同时承担 Cell 写入、water table 和上下文职责；ETF 还确认中心包络会扭曲 AREA/RIDGE 并增加列热路径成本 | 不向 ETF 或 RTF 反哺该设计；仅保留 RTF 原有语义供独立项目评审 |
 
 ## 5. 详细条目
 
@@ -187,23 +187,21 @@ ETF 当前任务优先级仍以 `PLAN.md` 为准；反哺项只有进入独立 R
   不变；allocation/chunk 与 JFR 有实际收益；不能使用预测 surface、固定 margin、角点或全局
   `minValue/maxValue` 代替局部证明。
 
-### FB-008：uplift 纯 scalar 与 Cell 解耦
+### FB-008：中心距离 uplift 拒绝记录
 
-- **优先级/状态**：P2，`ETF_PROVEN`。
-- **ETF 证据**：2026-07-19 新增 `EndTerrainUpliftRuntime`，使用已有
-  `ContinentSignalBuffer` 的 edge、landness、inlandness 和 corrected centre，输出独立 `[0,1]`
-  uplift；已通过中心峰值、海岸回落、平移不变性、范围、信号闭环、完整 common 和双平台发布门禁。
+- **优先级/状态**：P2，`REJECTED`。
+- **ETF 证据**：上一轮 prototype 曾尝试把 corrected centre distance 变成独立 `[0,1]`
+  uplift，再作为宏观 relief envelope；该方案已删除。视觉审查确认它会把整个大陆向中心抬高，
+  扭曲 AREA/RIDGE 地貌，并增加每列距离、平滑和信号传播成本。
 - **RTF 当前事实**：`UpliftContinentGenerator` 的 `getSmoothVoronoiGradient` 与 uplift 计算仍位于
   `Cell`/`GeneratorContext` 绑定的大陆生成器中，并会把结果写入 `Cell.waterTable`；这对 RTF 主世界
   语义有效，但不适合直接成为跨模组的轻量采样接口。
-- **建议方向**：在 RTF 独立分支评估一个可选纯数学 helper，输入已完成 ownership/centroid 采样的
-  caller-owned primitive 结果，输出 uplift scalar；现有 `Cell.waterTable` 路径保留为兼容 adapter，
-  不要求一次重写 RTF 大陆生成器。
-- **RTF 验收**：默认主世界 uplift、water table、river cache 和 biome 结果逐位不变；纯 helper 与
-  现有 gradient 在固定 seed/坐标上有明确 parity；无逐列 record 分配；四 worker、不同 tile 访问
-  顺序和世界关闭后无 stale cache；JFR 必须证明成本没有转移到重复 ownership 采样。
+- **决策**：ETF 不新增 uplift helper、signal、preview mode 或 preset 字段。大陆中心只作为
+  ownership/稳定身份/诊断数据，侵蚀、河流和排水必须消费最终 terrain top 与 finite volume。
+- **RTF 边界**：RTF 主世界的既有 uplift/water table 语义仍由 RTF 自己维护；这不是 ETF 可复用的
+  轻量跨项目接口，也不应被写成 ETF 已验证的改进。
 - **非目标/风险**：不把 ETF 的末地 finite volume、外海、预览颜色、NeoForge UI 或 RTF 洞穴方案
-  带回 RTF；ETF 当前只读 RTF 工作树，后续由独立 RTF 开发流程人工评审和迁移。
+  带回 RTF；ETF 当前只读 RTF 工作树。未来 RTF 若调整自身 uplift，必须由独立 RTF 流程验证。
 
 ## 6. 不应反哺的 ETF 专有内容
 

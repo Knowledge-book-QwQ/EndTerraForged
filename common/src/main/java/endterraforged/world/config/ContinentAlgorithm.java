@@ -9,8 +9,7 @@ package endterraforged.world.config;
 public enum ContinentAlgorithm {
     LEGACY_RADIAL,
     RTF_MULTI,
-    RTF_ADVANCED,
-    RTF_UPLIFT_EXPERIMENTAL;
+    RTF_ADVANCED;
 
     /**
      * Returns whether this algorithm has a complete runtime implementation in
@@ -31,8 +30,7 @@ public enum ContinentAlgorithm {
      */
     public boolean usesRtfTectonicScale() {
         return this == RTF_MULTI
-                || this == RTF_ADVANCED
-                || this == RTF_UPLIFT_EXPERIMENTAL;
+                || this == RTF_ADVANCED;
     }
 
     /**

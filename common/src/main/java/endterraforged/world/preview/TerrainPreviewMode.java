@@ -11,7 +11,6 @@ public enum TerrainPreviewMode {
     HEIGHT,
     LANDNESS,
     ARCHIPELAGO,
-    UPLIFT,
     VOLUME,
     LAYERS,
     BIOMES,

@@ -96,7 +96,6 @@ public final class EndHeightmap {
     private final float terrainLayerHorizontalScale;
     private final boolean terrainUsesWorldCoordinates;
     private final boolean continentBandsActive;
-    private final EndTerrainUpliftRuntime upliftRuntime;
     private final EndArchipelagoMask archipelagoMask;
     private final EndArchipelagoRelief archipelagoRelief;
     private final boolean archipelagoActive;
@@ -184,7 +183,6 @@ public final class EndHeightmap {
         this.continentBandsActive = profile.topologyMode() == TopologyMode.OUTER_CONTINENTS
                 && profile.continentConfig().continentAlgorithm().supportsContinentBands()
                 && profile.continentConfig().continentBands().enabled();
-        this.upliftRuntime = new EndTerrainUpliftRuntime(profile.continentConfig());
         this.archipelagoActive = isArchipelagoActive(profile);
         this.archipelagoMask = this.archipelagoActive
                 ? new EndArchipelagoMask(seed) : EndArchipelagoMask.DISABLED;
@@ -209,7 +207,7 @@ public final class EndHeightmap {
                 this.terrainEligibilityPolicy,
                 this.seaMode, this.landmassVolume, this.globalVerticalScale, this.globalHorizontalScale,
                 this.terrainRegionScale, this.terrainLayerAmplitudeScale, this.terrainLayerHorizontalScale,
-                this.continentBandsActive, this.upliftRuntime, this.archipelagoMask, this.archipelagoRelief,
+                this.continentBandsActive, this.archipelagoMask, this.archipelagoRelief,
                 this.archipelagoActive,
                 climateModulator, this.riverMap, this.lakeMap);
     }
@@ -226,7 +224,7 @@ public final class EndHeightmap {
                 this.terrainEligibilityPolicy,
                 this.seaMode, this.landmassVolume, this.globalVerticalScale, this.globalHorizontalScale,
                 this.terrainRegionScale, this.terrainLayerAmplitudeScale, this.terrainLayerHorizontalScale,
-                this.continentBandsActive, this.upliftRuntime, this.archipelagoMask, this.archipelagoRelief,
+                this.continentBandsActive, this.archipelagoMask, this.archipelagoRelief,
                 this.archipelagoActive,
                 this.climateModulator, riverMap, this.lakeMap);
     }
@@ -243,7 +241,7 @@ public final class EndHeightmap {
                 this.terrainEligibilityPolicy,
                 this.seaMode, this.landmassVolume, this.globalVerticalScale, this.globalHorizontalScale,
                 this.terrainRegionScale, this.terrainLayerAmplitudeScale, this.terrainLayerHorizontalScale,
-                this.continentBandsActive, this.upliftRuntime, this.archipelagoMask, this.archipelagoRelief,
+                this.continentBandsActive, this.archipelagoMask, this.archipelagoRelief,
                 this.archipelagoActive,
                 this.climateModulator, this.riverMap, lakeMap);
     }
@@ -257,8 +255,7 @@ public final class EndHeightmap {
                           float terrainRegionScale, float terrainLayerAmplitudeScale,
                            float terrainLayerHorizontalScale,
                            boolean continentBandsActive,
-                           EndTerrainUpliftRuntime upliftRuntime,
-                           EndArchipelagoMask archipelagoMask,
+                            EndArchipelagoMask archipelagoMask,
                            EndArchipelagoRelief archipelagoRelief,
                            boolean archipelagoActive,
                            ClimateModulator climateModulator,
@@ -280,7 +277,6 @@ public final class EndHeightmap {
         this.terrainUsesWorldCoordinates = usesWorldCoordinates(
                 globalHorizontalScale, terrainRegionScale, terrainLayerHorizontalScale);
         this.continentBandsActive = continentBandsActive;
-        this.upliftRuntime = Objects.requireNonNull(upliftRuntime, "upliftRuntime");
         this.archipelagoMask = Objects.requireNonNull(archipelagoMask, "archipelagoMask");
         this.archipelagoRelief = Objects.requireNonNull(archipelagoRelief, "archipelagoRelief");
         this.archipelagoActive = archipelagoActive;
@@ -327,8 +323,7 @@ public final class EndHeightmap {
     /** Density path that reuses the complete cached continent signal. */
     float getHeight(float x, float z, int seed, ContinentSignalBuffer continentSignals) {
         Objects.requireNonNull(continentSignals, "continentSignals");
-        return getHeight(x, z, seed, continentSignals.landness(), continentSignals.inlandness(),
-                true, continentSignals);
+        return getHeight(x, z, seed, continentSignals.landness(), continentSignals.inlandness(), true);
     }
 
     /** Density path that reuses the complete cached mainland and archipelago signal. */
@@ -351,13 +346,8 @@ public final class EndHeightmap {
 
     private float getHeight(float x, float z, int seed, float landness, float inlandness,
                             boolean landnessKnown) {
-        return getHeight(x, z, seed, landness, inlandness, landnessKnown, null);
-    }
-
-    private float getHeight(float x, float z, int seed, float landness, float inlandness,
-                            boolean landnessKnown, ContinentSignalBuffer continentSignals) {
         float h = landnessKnown
-                ? getTerrainHeight(x, z, seed, landness, inlandness, continentSignals)
+                ? getTerrainHeight(x, z, seed, landness, inlandness)
                 : getTerrainHeight(x, z, seed);
         if (this.climateModulator != null) {
             h = this.climateModulator.modulate(x, z, seed, this.levels, h);
@@ -412,7 +402,7 @@ public final class EndHeightmap {
         if (this.terrainRegionComposer != null) {
             ContinentSignalBuffer signals = CONTINENT_SIGNAL_SCRATCH.get();
             sampleContinentSignals(x, z, seed, signals);
-            return composeTerrainHeight(x, z, seed, 0.0F, signals.landness(), signals.inlandness(), signals);
+            return composeTerrainHeight(x, z, seed, 0.0F, signals.landness(), signals.inlandness());
         }
         float horizontalScale = this.globalHorizontalScale
                 * this.terrainRegionScale
@@ -425,7 +415,7 @@ public final class EndHeightmap {
         float terrain = landness != 0.0F
                 ? landness * this.mountains.compute(sampleX, sampleZ, seed)
                 : 0.0F;
-        return composeTerrainHeight(x, z, seed, terrain, landness, signals.inlandness(), null);
+        return composeTerrainHeight(x, z, seed, terrain, landness, signals.inlandness());
     }
 
     private float getTerrainHeightWithLandmass(float x, float z, int seed,
@@ -443,7 +433,7 @@ public final class EndHeightmap {
     private float getMainTerrainHeight(float x, float z, int seed,
                                        ContinentSignalBuffer signals) {
         if (this.terrainRegionComposer != null) {
-            return composeTerrainHeight(x, z, seed, 0.0F, signals.landness(), signals.inlandness(), signals);
+            return composeTerrainHeight(x, z, seed, 0.0F, signals.landness(), signals.inlandness());
         }
         if (!this.terrainUsesWorldCoordinates) {
             return getMainTerrainHeight(x, z, seed);
@@ -451,17 +441,12 @@ public final class EndHeightmap {
         float terrain = signals.landness() != 0.0F
                 ? signals.landness() * this.mountains.compute(x, z, seed)
                 : 0.0F;
-        return composeTerrainHeight(x, z, seed, terrain, signals.landness(), signals.inlandness(), signals);
+        return composeTerrainHeight(x, z, seed, terrain, signals.landness(), signals.inlandness());
     }
 
     private float getTerrainHeight(float x, float z, int seed, float landness, float inlandness) {
-        return getTerrainHeight(x, z, seed, landness, inlandness, null);
-    }
-
-    private float getTerrainHeight(float x, float z, int seed, float landness, float inlandness,
-                                   ContinentSignalBuffer continentSignals) {
         if (this.terrainRegionComposer != null) {
-            return composeTerrainHeight(x, z, seed, 0.0F, landness, inlandness, continentSignals);
+            return composeTerrainHeight(x, z, seed, 0.0F, landness, inlandness);
         }
         if (!this.terrainUsesWorldCoordinates) {
             return getTerrainHeight(x, z, seed);
@@ -469,20 +454,14 @@ public final class EndHeightmap {
         float terrain = landness != 0.0F
                 ? landness * this.mountains.compute(x, z, seed)
                 : 0.0F;
-        return composeTerrainHeight(x, z, seed, terrain, landness, inlandness, null);
+        return composeTerrainHeight(x, z, seed, terrain, landness, inlandness);
     }
 
     private float composeTerrainHeight(float x, float z, int seed, float terrain, float landness,
-                                       float inlandness, ContinentSignalBuffer continentSignals) {
+                                       float inlandness) {
         float reliefEnvelope = this.continentBandsActive
                 ? this.terrainComposer.reliefEnvelope(inlandness)
                 : 1.0F;
-        if (this.terrainRegionComposer != null
-                && this.upliftRuntime.enabled()
-                && continentSignals != null) {
-            float uplift = this.upliftRuntime.sample(x, z, continentSignals);
-            reliefEnvelope = Math.min(reliefEnvelope, 0.18F + 0.82F * uplift);
-        }
         float terrainHeight = Math.clamp(
                 terrain
                         * this.globalVerticalScale
@@ -556,16 +535,12 @@ public final class EndHeightmap {
             sampleContinentSignals(x, z, seed, signals);
             this.terrainRegionComposer.sampleSignals(x, z, seed, TERRAIN_REGION_SCRATCH.get(), output,
                     signals.landness(), signals.inlandness(), this.terrainEligibilityPolicy);
-            output.setUplift(this.upliftRuntime.sample(x, z, signals));
             return;
         }
         EndTerrainLayer layer = this.terrainComposer.selectedLayer(x, z, seed);
         float height = this.terrainComposer.auxiliaryContribution(x, z, seed);
         output.set(height, roughness(layer), resistance(layer), layer == EndTerrainLayer.NONE
                 ? 0 : 1 << layer.ordinal());
-        ContinentSignalBuffer continentSignals = CONTINENT_SIGNAL_SCRATCH.get();
-        sampleContinentSignals(x, z, seed, continentSignals);
-        output.setUplift(this.upliftRuntime.sample(x, z, continentSignals));
     }
 
     /**
@@ -670,18 +645,6 @@ public final class EndHeightmap {
         ContinentSignalBuffer signals = CONTINENT_SIGNAL_SCRATCH.get();
         sampleContinentSignals(x, z, seed, signals);
         return signals.inlandness();
-    }
-
-    /** Returns the independent macro-continent uplift scalar in {@code [0,1]}. */
-    public float getUplift(float x, float z, int seed) {
-        ContinentSignalBuffer signals = CONTINENT_SIGNAL_SCRATCH.get();
-        sampleContinentSignals(x, z, seed, signals);
-        return this.upliftRuntime.sample(x, z, signals);
-    }
-
-    /** Returns the immutable uplift runtime used by this heightmap. */
-    public EndTerrainUpliftRuntime upliftRuntime() {
-        return this.upliftRuntime;
     }
 
     /** Returns whether the experimental, non-persisted archipelago runtime is active. */

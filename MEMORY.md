@@ -1,7 +1,7 @@
 # EndTerraForged 项目记忆
 
 > 文档状态：当前有效。
-> 最近整理：2026-07-22。
+> 最近整理：2026-07-23。
 > 本文件只记录长期有效的架构决策、踩坑和兼容经验；当前任务见 [`PLAN.md`](PLAN.md)，完整产品路线见 [`GOAL.md`](GOAL.md)。
 
 ## 1. 产品与平台决策
@@ -14,7 +14,7 @@
 - 2026-07-18 ETF 火山边界保持不变：`EndTerrainVolcanoRuntime` 只作为 `REGION_PLANNED` 下受控的有限 analytical COMPACT relief；它不包含 RTF `Cell`、`GeneratorContext`、artifact、流体、surface material、biome registry 或 river cache，也不开放到玩家 preset/UI。后续若有正式区域消费者，优先为 ETF 自己建立 caller-owned primitive artifact 契约，并保留 analytical fallback。
 - 2026-07-18 外部性能资料审查结论：Bye-Pregen 只作为 1.21.1 post-processing profiling 参考；quick-noise 只作为未来纯 3D 洞穴/离线预览的 Java 21 CPU benchmark 候选；按 Y section 并行不能创建第二套固定线程池或嵌套 `parallel()`；QUICK_V2、native/GPU 和 C2ME compiler shield 均不得作为透明默认优化。ETF 仍以固定 seed、RTF/C2ME parity、Standard JFR、边界连续性和完整高度正确性为先。
 - 2026-07-18 跨项目反哺规则：[`docs/ETF_TO_RTF_IMPROVEMENT_TRACKER.md`](docs/ETF_TO_RTF_IMPROVEMENT_TRACKER.md) 是 ETF 向 RTF 回送通用改进的唯一状态台账。ETF 任务只读 RTF；先记录 ETF 证据、RTF 当前事实、风险和 RTF 验收门禁，再由独立 RTF 分支人工实现。其他 review/调研只作为来源，不重复维护反哺状态。
-- 2026-07-14 RTF 大陆复用边界：R9.3.6 与 R9.6 的 `ContinentGenerator` / `AdvancedContinentGenerator` 大陆核心没有版本差异，后续按 golden parity -> `RTF_MULTI` -> 末地 `landness/inlandness` 分带 -> `RTF_ADVANCED` 的顺序移植。`UpliftContinentGenerator` 只允许提取平滑 Voronoi gradient/centroid uplift 标量，不移植 water table、river、lake 或 terracing；`ArchipelagoPopulator` 只拆出附属群岛 mask、海岸分带和 relief，禁止整体搬入主世界海洋/`Cell` 语义，也不得复用高空 `FloatingIslandsField`。已有 `format_version=2` 缺少 `continent.algorithm` 时必须保持 legacy 大陆；R2 新增 bands 持久化字段后已升级为 `format_version=3`。
+- 2026-07-14/23 RTF 大陆复用边界：R9.3.6 与 R9.6 的 `ContinentGenerator` / `AdvancedContinentGenerator` 大陆核心没有版本差异，后续按 golden parity -> `RTF_MULTI` -> 末地 `landness/inlandness` 分带 -> `RTF_ADVANCED` 的顺序移植。`UpliftContinentGenerator` 的中心抬升设计已明确拒绝；`ArchipelagoPopulator` 只拆出附属群岛 mask、海岸分带和 relief，禁止整体搬入主世界海洋/`Cell` 语义，也不得复用高空 `FloatingIslandsField`。已有 `format_version=2` 缺少 `continent.algorithm` 时必须保持 legacy 大陆；R2 新增 bands 持久化字段后已升级为 `format_version=3`。
 - 2026-07-15 `RTF_ADVANCED` 纯数学移植陷阱：高级大陆 warp 必须使用 RTF `Perlin2` 的
   24 方向 gradient，不能用普通 `Perlin` 代替；cell size variance 调用的是四参数
   `NoiseUtil.map(value, min, max, range)` 归一化重载，不是五参数线性映射。误用五参数
@@ -29,13 +29,13 @@
   避免超远坐标碰撞。`BandedContinent` 只能重塑连续值，非零 outer activation 只能缩放
   连续值，中央保护/legacy/skip 必须清空 identity。后续 TerrainRegionPlan、preview、
   SurfaceContext 和 Content Pack 复用该身份，不得根据混合后的高度或 edge 重新猜测大陆。
-- 2026-07-14/15 R0/R1 大陆移植完成：`ContinentAlgorithm` 已定义 `LEGACY_RADIAL`、`RTF_MULTI`、`RTF_ADVANCED`、`RTF_UPLIFT_EXPERIMENTAL`；当前只有 legacy 与 `RTF_MULTI` 可通过 validator，未实现选项明确拒绝。`RtfMultiContinent` 保留 RTF `ContinentGenerator` 的 root seed 顺序、复合 warp、3x3 最近/次近扫描、`DISTANCE_2_DIV`、`clampMin=0.2` 和 `inland=0.502` shape 语义，输出为不可变 `[0,1]` landness。`RtfMultiContinentTest` 固化 R9.3.6 参数、root seed `123456789` 和六个坐标的逐位 fixture，并覆盖重排、多线程、远坐标、连续性和 `mapAll`。`OUTER_CONTINENTS + RTF_MULTI` 由 `OuterContinentsContinent` 包裹，中央保护、有限体积、EndDensity 与 preview 继续使用既有 ETF 边界。2026-07-15 起，只有新 `EndPreset.defaults()` 使用 `ContinentConfig.rtfMultiDefaults()`；`ContinentConfig.defaults()`、空 JSON 和显式旧 preset 继续保持 `LEGACY_RADIAL`，避免静默重塑存档。固定 seed 的四方向一万格走廊测试防止新默认再次产生“万格无大陆”。
+- 2026-07-14/15 R0/R1 大陆移植完成：`ContinentAlgorithm` 已定义 `LEGACY_RADIAL`、`RTF_MULTI`、`RTF_ADVANCED`；当前只有 legacy 与 `RTF_MULTI` 可通过 validator，未实现选项明确拒绝。`RtfMultiContinent` 保留 RTF `ContinentGenerator` 的 root seed 顺序、复合 warp、3x3 最近/次近扫描、`DISTANCE_2_DIV`、`clampMin=0.2` 和 `inland=0.502` shape 语义，输出为不可变 `[0,1]` landness。`RtfMultiContinentTest` 固化 R9.3.6 参数、root seed `123456789` 和六个坐标的逐位 fixture，并覆盖重排、多线程、远坐标、连续性和 `mapAll`。`OUTER_CONTINENTS + RTF_MULTI` 由 `OuterContinentsContinent` 包裹，中央保护、有限体积、EndDensity 与 preview 继续使用既有 ETF 边界。2026-07-15 起，只有新 `EndPreset.defaults()` 使用 `ContinentConfig.rtfMultiDefaults()`；`ContinentConfig.defaults()`、空 JSON 和显式旧 preset 继续保持 `LEGACY_RADIAL`，避免静默重塑存档。固定 seed 的四方向一万格走廊测试防止新默认再次产生“万格无大陆”。
 - 2026-07-14 R2 分带与有限体积整合完成代码闭环：`ContinentBandsConfig` 默认阈值为 `void_outer=0.10`、`shelf=0.25`、`rim=0.327`、`coast=0.448`、`inland=0.502`，Validator 强制 `[0,1]` 与严格递增。`BandedContinent` 只包裹 `OUTER_CONTINENTS + RTF_MULTI`，不回写 `RtfMultiContinent` 的 golden 输出；它把原始信号转换为有限 shelf 的 landness 与山地、高原、火山 relief 的 inlandness。密度热路径使用 caller-owned `ContinentSignalBuffer` 和线程隔离原始类型列缓存，不在每个 Y 创建 record、数组或集合；preview 通过同一 `EndHeightmap` / `EndDensity` 路径观察差异。大陆子编辑器只显示已实现算法，并将 `RTF_MULTI`、大陆分带开关与五个阈值直接写入同一 preview/Done builder，避免实机验收误测到默认 legacy 路径。旧 preset 仅在用户显式启用 bands 后升级为 v3；未启用时保留原格式和兼容语义。新 v3 preset 必须显式写出 bands；v0-v2 缺失 bands 时解码为 `LEGACY_PASSTHROUGH`，保持旧世界输出。自动门禁已通过，真实客户端、RTF 同载、C2ME 与 JFR 验收仍是发布前置条件。
 - 2026-07-15/17 海洋正式生成边界：禁止把 ETF 全局流体规则简单改成“sea level 以下全水”，因为 disabled aquifer 会把大陆洞穴和 shelf 下方负 density 一并交给 picker。`EndOceanFluidPicker` 在 `NoiseChunk.forChunk` 参数层按当前不可变 `EndDensity` 与 seed 绑定。首版只用二维 `landness == 0` 判断外海，2026-07-17 实机截图在约 `(10079,1,-648)` 与 `(10825,-12,-659)` 证明大陆投影内整列断水，使有限 shelf 悬在干燥空腔上。当前契约改为三维连通：零 landness 外海始终供水；正 landness 的有限大陆列只在 cached underside 以下供水；shelf 体积内的 carve 不供水。`WITH_FLOOR` 的三 octave 低频海床跨外海和大陆投影连续，海床以下即使被 subsurface carve 也不由外海 picker 灌水；`NO_FLOOR` 不建海床并让 underside 以下保持水体。中央保护、无海模式和 bootstrap 降级仍返回 air，vanilla `Y < -54` lava fallback 不会回来。热路径只复用线程隔离列缓存 primitive，不新增对象或共享可变状态。
 - 2026-07-14 地表质量根因结论：当前 ETF 的视觉问题不是“参数还不够多”，而是生成层级缺失。`EndTerrainComposer` 主要使用一个低频 selector，把权重区间映射到 plains/hills/plateau/volcano 等通用噪声层；它没有稳定的 terrain region id/center/edge，没有 area/ridge/compact 三类放置语义，也没有 RTF 成熟地貌族的独立 morphology。结果是地貌在剖面上更像连续抖动噪声，而不是由区域组织的平原、高原、山系和火山。后续禁止继续靠增加 slider、叠加全局噪声或修饰现有 selector 来冒充高质量地表。
-- 2026-07-14 高质量地表架构锁定为：`ContinentSignals -> TerrainRegionPlan -> TerrainFamilyRuntime -> StructuredFeatureOverlay -> Uplift/Archipelago -> Erosion/Drainage -> EndLandmassVolume -> EndDensity`。`TerrainRegionPlan` 必须是不可变、零热路径分配的区域结果，至少提供 primary/secondary family、blend、region id、center、edge 与稳定方向；正式 density 仍按 X/Z 列缓存最终横向信号。
-- 2026-07-14 RTF 地表复用分三级。可直接移植：高级大陆的纯 Voronoi/中垂线数学、稳定噪声 primitive、成熟山地/高原等 shape 与有限 ridge envelope。必须末地化改造：uplift、archipelago、river geometry、hydraulic erosion、terrain region/placement，需要去除海洋、水位、`Cell`、registry、river cache 与主世界 terrain type 写入。明确拒绝：RTF UI、RTF cave、`GeneratorContext`、池化/可变 `Cell`、`Resource<Cell>`、全局 water table、主世界 biome 耦合和独占 `NoiseRouter.mapAll` 注入。
-- 2026-07-18 火山来源状态修正：RTF 最新 `codex/r10x-volcano-rt4-fluid-routing` 工作树已经形成较成熟的区域 artifact、provenance、bounded cache、single-flight、生命周期和 RT4 流体路由候选。ETF 的 `EndTerrainVolcanoRuntime` 仍冻结，但原因是当前阶段范围、末地体积语义和独立性能/兼容门禁，而不是继续断言 RTF 火山没有实现。ETF 首个高质量地表垂直切片仍以 AREA 地貌、有限 RIDGE、非径向 uplift、群岛海岸和 analytical erosion 为准；火山后续单独评审。
+- 2026-07-14/23 高质量地表架构锁定为：`ContinentSignals -> TerrainRegionPlan -> TerrainFamilyRuntime -> StructuredFeatureOverlay -> Archipelago/Coast -> Erosion/Drainage -> EndLandmassVolume -> EndDensity`。`TerrainRegionPlan` 必须是不可变、零热路径分配的区域结果，至少提供 primary/secondary family、blend、region id、center、edge 与稳定方向；正式 density 仍按 X/Z 列缓存最终横向信号。
+- 2026-07-14/23 RTF 地表复用分三级。可直接移植：高级大陆的纯 Voronoi/中垂线数学、稳定噪声 primitive、成熟山地/高原等 shape 与有限 ridge envelope。必须末地化改造：archipelago、river geometry、hydraulic erosion、terrain region/placement，需要去除海洋、水位、`Cell`、registry、river cache 与主世界 terrain type 写入。大陆中心 uplift 不再属于可改造范围。明确拒绝：RTF UI、RTF cave、`GeneratorContext`、池化/可变 `Cell`、`Resource<Cell>`、全局 water table、主世界 biome 耦合和独占 `NoiseRouter.mapAll` 注入。
+- 2026-07-18/23 火山来源状态修正：RTF 最新 `codex/r10x-volcano-rt4-fluid-routing` 工作树已经形成较成熟的区域 artifact、provenance、bounded cache、single-flight、生命周期和 RT4 流体路由候选。ETF 的 `EndTerrainVolcanoRuntime` 仍冻结，但原因是当前阶段范围、末地体积语义和独立性能/兼容门禁，而不是继续断言 RTF 火山没有实现。ETF 首个高质量地表垂直切片以 AREA 地貌、有限 RIDGE、群岛海岸和 analytical erosion 为准；火山后续单独评审。
 - 2026-07-14 当前 RTF 开发分支中的 `VariableTerrainRegionLayout`、`TerrainCatalog`、`ShapeAwareTerrainComposer` 与有限 ridge placement 是有价值的候选，但它们属于比 R9.6 更新的开发线。ETF 不得把“当前 RTF 有代码”自动等同于“稳定可直接默认启用”；必须先做来源版本记录、独立 fixture、性能预算和 ETF 末地语义审查。RTF volcano 的来源成熟度由后续 2026-07-15 决策单独否决。
 - 2026-07-15 shape-aware ownership 修正：RTF S3/S4.1 的“AREA host + 稀疏 shaped anchor overlay”只保留为几何原型，不作为 ETF 最终生产架构。ETF 首个生产版 `TerrainRegionPlan` 由全部正权重 `AREA` family 建立统一无空洞 ownership；`weight` 表示 AREA 的近似面积占比，region size 使用 `weight / scale^2` 补偿并只改变重复区域尺寸。RIDGE 是有界物理形态叠加，不得夺取宏观 ownership；COMPACT/火山在来源与自研规格成熟前冻结。ownership family、underlay family、visible family 与 physical influence 分开；ridge 在 footprint 外物理影响归零并回到 underlay，ownership 不得随机退回另一个 host。
 - 2026-07-18 RTF S4.3-S4.7 为上述决策提供了新的实证：让 RIDGE 拥有完整宏观区域会产生“平地却属于山地 owner”的身份和权重错位。ETF 已完成 AREA-only ownership 与独立 bounded ridge anchors：每点最多保留三个 ridge candidate，重叠 relief 取最大值，最强 physical influence 决定 feature anchor identity、roughness、erosion resistance、tags 与 visible family；AREA `regionId + entryId` 在 eligibility 前后保持不变。ETF 保留多候选 partition-of-unity、caller-owned primitive buffer、packed stable id 和 `400` 次 AREA 最坏搜索预算。
@@ -237,23 +237,16 @@
 - 历史 review 和 `.trae` spec 保留原结论，但必须标记为历史快照。
 - 后续模型固定阅读顺序见 [`docs/DOCUMENTATION_INDEX.md`](docs/DOCUMENTATION_INDEX.md)。
 
-## 13. 2026-07-19 P4.5 uplift
+## 13. 2026-07-23 P4.5 uplift rejection
 
-- 新增 `EndTerrainUpliftRuntime`，只消费已有 `ContinentSignalBuffer` 的 edge、landness、
-  inlandness、owner identity 和 corrected centre；它是 immutable、线程安全、无采样期对象分配的
-  `[0,1]` scalar。中心包络采用保守的大陆 cell 半径，edge 与 coast envelope 负责把宏观抬升在
-  大陆边缘明确收回。
-- uplift 不是第二套大陆 ownership，也没有复制 RTF 的 `Cell`、`GeneratorContext`、water table、
-  river cache 或 terracing。RTF `UpliftContinentGenerator` 只作为 MIT 纯数学语义参考；ETF 的
-  runtime 通过已发布中心和 caller-owned buffer 解耦。
-- `EndHeightmap` 只在 `REGION_PLANNED` 且 RTF 算法启用时把 uplift 作为 relief envelope 使用；
-  legacy terrain、旧 preset、非 RTF 算法和默认世界的高度结果保持兼容。`EndDensity` 复用列缓存中
-  已采样的完整大陆信号，不能为了 uplift 在每个 Y 再采样大陆。
-- `EndTerrainSignalBuffer.uplift()` 是独立通道，不与 auxiliary `height` 混淆；preview 的
-  `UPLIFT` 模式调用同一 heightmap runtime。它只反映宏观抬升候选，不代表地貌、侵蚀或正式方块已完成。
-- 本轮自动门禁：定点测试、完整 `:common:test`（1110 项）、`:neoforge:compileJava`、
-  `:fabric:compileJava` 和 `:verifyReleaseArtifacts --no-daemon` 顺序通过。真实客户端、RTF+C2ME
-  同载和 JFR 仍是后续证据，不能由自动门禁代替。
+- 2026-07-19 曾接入 RTF-derived corrected-centroid uplift scalar，作为 `REGION_PLANNED` 的宏观
+  relief envelope；该实现没有 water table/river cache，但仍把大陆中心距离变成整体高度包络。
+- 2026-07-23 产品决策明确否决该设计：中心穹顶会扭曲 AREA/RIDGE 地貌，并为每列增加距离、
+  smoothstep 与信号传播成本；它也是 RTF 为 3D 河流/水位妥协的产物，不符合 ETF 地表职责分层。
+- `EndTerrainUpliftRuntime`、uplift signal、preview、语言 key 和实验枚举已移除。后续河流/排水只能
+  消费最终地表与 volume，不能要求大陆先按中心距离抬升。删除后的真实客户端视觉仍需重新验收。
+- 历史 JSON 中的 `RTF_UPLIFT_EXPERIMENTAL` 现在按 unknown enum 给出可见 Codec 错误，不做静默
+  fallback；缺失 `algorithm` 的旧 JSON 仍保持既有 legacy 默认语义。
 
 ## 14. 2026-07-19 P4.6 archipelago runtime
 
@@ -296,7 +289,7 @@
 ## 15. 2026-07-22 P4.7 侵蚀、排水与性能决策
 
 - P4.7 固定总体顺序为 `raw top -> erosion/incision -> smoothing -> final metrics -> continuity correction -> volume`。
-  raw top 必须先包含 AREA、RIDGE、uplift 和 archipelago；侵蚀不改变 continent、terrain region、AREA
+  raw top 必须先包含 AREA、RIDGE 和 archipelago；侵蚀不改变 continent、terrain region、AREA
   ownership 或 RIDGE identity，也不修补错误拓扑。
 - local analytical runtime 是 immutable、逐列纯函数，只使用 caller-owned primitive buffer 和实现内部
   固定常量。它作为低成本 baseline/fallback，不预先视为正式算法。P4.7 统一比较 local analytical、

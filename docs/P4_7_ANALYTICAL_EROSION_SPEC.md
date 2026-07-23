@@ -8,7 +8,7 @@
 ## 1. 目标
 
 P4.7 保留一个低成本、逐列纯函数的 analytical erosion baseline。它只修改已经完成 AREA、
-RIDGE、uplift 和 archipelago 合成后的 raw top，不重新选择大陆、terrain region、family 或 feature
+RIDGE 和 archipelago 合成后的 raw top，不重新选择大陆、terrain region、family 或 feature
 ownership，也不尝试用后处理修复错误拓扑。
 
 固定流水线为：
@@ -43,7 +43,7 @@ stream-power analytical/multigrid tile，以及 Priority-Flood + flow accumulati
 
 ## 3. 当前实现事实
 
-1. `EndHeightmap.getTerrainHeight(...)` 已在 raw top 中合成 AREA、RIDGE、uplift 和 archipelago；
+1. `EndHeightmap.getTerrainHeight(...)` 已在 raw top 中合成 AREA、RIDGE 和 archipelago；
    climate、river 与 lake 位于其后。
 2. `EndTerrainProfileBuffer` 已提供 raw top、slope、curvature、roughness、erosion resistance 和
    terrain tags，且使用 caller-owned mutable buffer。

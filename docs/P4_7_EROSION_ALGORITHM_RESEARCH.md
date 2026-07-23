@@ -202,6 +202,33 @@ flow graph 之后的 incision 核心候选。
 - thermal/talus relaxation：只让超过休止角的材料局部下移，适合作为 1-3 次、固定半径、有界的
   收尾 pass；它不能替代排水或 hydraulic incision。
 
+### 4.8 RTF R10X 3D 河流研究对齐
+
+2026-07-23 对本地只读 ReTerraForged 河流研究链的复核进一步确认：中心距离 uplift 的问题不只是
+外观。旧 RTF 链把同一 centre-high scalar 同时用于大陆高度、河流水面输入、平坦度、lake widening
+和 surface water 资格，形成 centroid pyramid、径向主河、15 段结构货架与多套水位 authority。
+继续调 uplift 强度、增加噪声或修补局部 waterfall 都无法修复这种职责错位。
+
+RTF 的隔离 proof 以 Java 21 source/target 编写、由现有 Zulu 25 执行，JDK 21 replay 仍是门禁；
+它已证明以下替代契约在算法层可行：显式 depression/spill/closed
+terminal、确定性单 receiver DAG、按物理面积精确重算 discharge、shared confluence node、两遍
+feasible-interval/profile solve，以及 immutable primitive artifact/caller-owned query。该 proof 不是
+Minecraft runtime、性能或最终 Candidate A/B/C 选型证据，但足以证明“河流必须依赖中心抬升”并非
+工程必要条件。
+
+ETF 只吸收以下跨项目不变量：
+
+- `routing potential != authoritative water/bed profile != visible corridor`；
+- 河流和排水消费已接受的最终 terrain top、land/ocean boundary 与 finite volume，不反向塑造大陆；
+- Priority-Flood/depression hierarchy、provisional adaptive MFD、deterministic receiver collapse、
+  exact area 和 two-pass profile 只能在独立的 bounded domain/artifact 阶段评审；
+- compiler scratch 在 publication 前释放，正式采样只读 immutable primitive artifact，禁止逐区块
+  flood-fill、跨区块搜索、访问顺序 authority 或 private worldgen executor。
+
+P4.7 仍只负责表面 erosion 与 drainage potential 的候选比较，不在本阶段实现完整 3D 河网、水面、
+湖泊、原版水或 hydrology cache lifecycle。RTF 的 `GeneratorContext`、`Cell`、`waterTable`、legacy
+gasket/surface 和 `LEGACY_UPLIFT` 兼容路径不进入 ETF。
+
 ## 5. 开源仓库审查
 
 | 仓库 | 许可证/状态 | 有价值部分 | ETF 边界 |

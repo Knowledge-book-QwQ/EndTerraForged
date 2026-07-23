@@ -247,6 +247,13 @@
   消费最终地表与 volume，不能要求大陆先按中心距离抬升。删除后的真实客户端视觉仍需重新验收。
 - 历史 JSON 中的 `RTF_UPLIFT_EXPERIMENTAL` 现在按 unknown enum 给出可见 Codec 错误，不做静默
   fallback；缺失 `algorithm` 的旧 JSON 仍保持既有 legacy 默认语义。
+- 2026-07-23 对 RTF R10X 3D river 研究、论文评审、工程可行性 proof、现行规范、WP01-WP08 与
+  导入前快照的只读复核确认：centre-high uplift 的根因是 authority 混用，而不只是曲线不好看。
+  ETF 长期保持 `routing potential != authoritative water/bed profile != visible corridor`；排水消费
+  最终 terrain top 与 finite volume，不反向要求大陆制造水头。RTF 的隔离 proof 已证明显式
+  depression/terminal、单 receiver DAG、exact area、shared confluence、two-pass profile 与 primitive
+  artifact 在算法契约上可行，但该 proof 仍缺 JDK 21 replay，且未证明 Minecraft runtime 或性能，
+  不能直接写成 ETF 已实现功能。
 
 ## 14. 2026-07-19 P4.6 archipelago runtime
 
@@ -339,6 +346,9 @@
   架构参考，不作为 ETF 1.21.1 runtime 依赖或成熟度证据。
 - 第一切片仅启用受控 `REGION_PLANNED`。legacy、中央保护、void、海岸、薄 shelf 和
   archipelago-dominant 列保持零影响；附属群岛在拥有独立 resistance/身份语义前不参与侵蚀。
+- RTF R10X 河流研究只能为 ETF 提供排水所有权与未来 artifact 设计约束。P4.7 仍只评估 surface
+  erosion/drainage potential；完整 depression hierarchy、receiver graph、shared profile、湖泊、水面、
+  原版水和 hydrology cache lifecycle 属于后续独立 3D 河流阶段，不得借 P4.7 提前接入。
 - REGION_PLANNED preview 必须消费同一 analytical runtime。旧 `PreviewErosionGrid` 只保留为 v3 droplet
   参数的兼容预览，不得进入正式 density。详细契约见
   [`docs/P4_7_ANALYTICAL_EROSION_SPEC.md`](docs/P4_7_ANALYTICAL_EROSION_SPEC.md)。

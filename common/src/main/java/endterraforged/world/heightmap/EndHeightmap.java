@@ -79,6 +79,8 @@ public final class EndHeightmap {
             ThreadLocal.withInitial(TerrainRegionBuffer::new);
     private static final ThreadLocal<EndTerrainSignalBuffer> TERRAIN_SIGNAL_SCRATCH =
             ThreadLocal.withInitial(EndTerrainSignalBuffer::new);
+    private static final ThreadLocal<MutableTerrainMetrics> TERRAIN_METRICS = new ThreadLocal<>();
+    private static volatile boolean terrainMetricsEnabled;
 
     private final Continent continent;
     private final Noise mountains;
@@ -331,6 +333,7 @@ public final class EndHeightmap {
         Objects.requireNonNull(landmassSignals, "landmassSignals");
         float landness = landmassSignals.landness();
         float inlandness = landmassSignals.inlandness();
+        recordRawTopEvaluation();
         float h = getTerrainHeightWithLandmass(x, z, seed, landmassSignals);
         if (this.climateModulator != null) {
             h = this.climateModulator.modulate(x, z, seed, this.levels, h);
@@ -378,6 +381,11 @@ public final class EndHeightmap {
      * @return normalised height in {@code [surface, 1]} (pre-river)
      */
     public float getTerrainHeight(float x, float z, int seed) {
+        recordRawTopEvaluation();
+        return getTerrainHeightUntracked(x, z, seed);
+    }
+
+    private float getTerrainHeightUntracked(float x, float z, int seed) {
         if (this.archipelagoActive) {
             EndLandmassSignalBuffer signals = LANDMASS_SIGNAL_SCRATCH.get();
             sampleLandmassSignals(x, z, seed, signals);
@@ -389,6 +397,7 @@ public final class EndHeightmap {
     /** Returns raw terrain top while reusing a caller-sampled landmass signal. */
     public float getTerrainHeight(float x, float z, int seed,
                                   EndLandmassSignalBuffer landmassSignals) {
+        recordRawTopEvaluation();
         return getTerrainHeightWithLandmass(x, z, seed,
                 Objects.requireNonNull(landmassSignals, "landmassSignals"));
     }
@@ -445,11 +454,12 @@ public final class EndHeightmap {
     }
 
     private float getTerrainHeight(float x, float z, int seed, float landness, float inlandness) {
+        recordRawTopEvaluation();
         if (this.terrainRegionComposer != null) {
             return composeTerrainHeight(x, z, seed, 0.0F, landness, inlandness);
         }
         if (!this.terrainUsesWorldCoordinates) {
-            return getTerrainHeight(x, z, seed);
+            return getTerrainHeightUntracked(x, z, seed);
         }
         float terrain = landness != 0.0F
                 ? landness * this.mountains.compute(x, z, seed)
@@ -562,6 +572,7 @@ public final class EndHeightmap {
         if (output == null) {
             throw new NullPointerException("output");
         }
+        recordTerrainProfileRequest();
         EndTerrainSignalBuffer signals = TERRAIN_SIGNAL_SCRATCH.get();
         sampleTerrainSignals(x, z, seed, signals);
 
@@ -690,6 +701,55 @@ public final class EndHeightmap {
     /** The composed terrain noise tree ({@code continent × mountains}). */
     public Noise terrain() {
         return this.terrain;
+    }
+
+    /** Enables per-thread raw terrain counters for focused benchmarks or tests. */
+    static void configureTerrainMetrics(boolean enabled) {
+        terrainMetricsEnabled = enabled;
+        if (enabled) {
+            TERRAIN_METRICS.set(new MutableTerrainMetrics());
+        } else {
+            TERRAIN_METRICS.remove();
+        }
+    }
+
+    /** Returns a snapshot of the current thread's raw terrain counters. */
+    static TerrainMetrics terrainMetrics() {
+        MutableTerrainMetrics metrics = TERRAIN_METRICS.get();
+        return metrics == null ? TerrainMetrics.ZERO : metrics.snapshot();
+    }
+
+    private static void recordRawTopEvaluation() {
+        if (!terrainMetricsEnabled) {
+            return;
+        }
+        MutableTerrainMetrics metrics = TERRAIN_METRICS.get();
+        if (metrics != null) {
+            metrics.rawTopEvaluations++;
+        }
+    }
+
+    private static void recordTerrainProfileRequest() {
+        if (!terrainMetricsEnabled) {
+            return;
+        }
+        MutableTerrainMetrics metrics = TERRAIN_METRICS.get();
+        if (metrics != null) {
+            metrics.terrainProfileRequests++;
+        }
+    }
+
+    static record TerrainMetrics(long rawTopEvaluations, long terrainProfileRequests) {
+        private static final TerrainMetrics ZERO = new TerrainMetrics(0, 0);
+    }
+
+    private static final class MutableTerrainMetrics {
+        private long rawTopEvaluations;
+        private long terrainProfileRequests;
+
+        private TerrainMetrics snapshot() {
+            return new TerrainMetrics(rawTopEvaluations, terrainProfileRequests);
+        }
     }
 
     /** The continent module backing this heightmap. */

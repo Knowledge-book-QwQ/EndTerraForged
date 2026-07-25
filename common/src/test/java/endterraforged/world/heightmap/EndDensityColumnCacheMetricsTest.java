@@ -19,16 +19,20 @@ class EndDensityColumnCacheMetricsTest {
         String previous = System.getProperty(property);
         System.setProperty(property, "true");
         EndDensity.configureColumnCacheMetrics(true);
+        EndHeightmap.configureTerrainMetrics(true);
         try {
             EndPreset smoke = EndPresetDevelopmentProfiles.defaultFallback();
             EndDensity density = new EndDensity(new EndHeightmap(smoke, SEED));
 
             long orderedChecksum = sample(density, false);
             EndDensity.ColumnCacheMetrics ordered = EndDensity.columnCacheMetrics();
+            EndHeightmap.TerrainMetrics orderedTerrain = EndHeightmap.terrainMetrics();
 
             EndDensity.configureColumnCacheMetrics(true);
+            EndHeightmap.configureTerrainMetrics(true);
             long shuffledChecksum = sample(density, true);
             EndDensity.ColumnCacheMetrics shuffled = EndDensity.columnCacheMetrics();
+            EndHeightmap.TerrainMetrics shuffledTerrain = EndHeightmap.terrainMetrics();
 
             assertEquals(orderedChecksum, shuffledChecksum,
                     "density bits must be independent of column access order");
@@ -43,16 +47,23 @@ class EndDensityColumnCacheMetricsTest {
                     "each land-column refresh should perform one complete height evaluation");
             assertEquals(ordered.heightEvaluations(), shuffled.heightEvaluations(),
                     "height evaluation count must be independent of column access order");
+            assertEquals(ordered.heightEvaluations(), orderedTerrain.rawTopEvaluations(),
+                    "each complete height evaluation should request one raw top in this fixture");
+            assertEquals(orderedTerrain.rawTopEvaluations(), shuffledTerrain.rawTopEvaluations(),
+                    "raw-top evaluation count must be independent of column access order");
             System.out.printf(
                     "[perf] p47ColumnCache ordered requests=%d hits=%d misses=%d collisions=%d "
                             + "evictions=%d ownerSwaps=%d fullColumnRefreshes=%d heightEvaluations=%d; "
-                            + "shuffled misses=%d collisions=%d heightEvaluations=%d%n",
+                            + "rawTopEvaluations=%d; shuffled misses=%d collisions=%d "
+                            + "heightEvaluations=%d rawTopEvaluations=%d%n",
                     ordered.requests(), ordered.hits(), ordered.misses(), ordered.collisions(),
                     ordered.evictions(), ordered.ownerSwaps(), ordered.fullColumnRefreshes(),
-                    ordered.heightEvaluations(), shuffled.misses(), shuffled.collisions(),
-                    shuffled.heightEvaluations());
+                    ordered.heightEvaluations(), orderedTerrain.rawTopEvaluations(),
+                    shuffled.misses(), shuffled.collisions(), shuffled.heightEvaluations(),
+                    shuffledTerrain.rawTopEvaluations());
         } finally {
             EndDensity.configureColumnCacheMetrics(false);
+            EndHeightmap.configureTerrainMetrics(false);
             if (previous == null) {
                 System.clearProperty(property);
             } else {

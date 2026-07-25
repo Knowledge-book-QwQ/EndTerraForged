@@ -317,14 +317,24 @@
   复用于全部 Y；任何邻域缓存都必须 per-worker、有界、owner-aware，且缓存命中、淘汰、访问顺序和
   C2ME worker 数不能改变位级结果。
 - 当前 256 项 direct-mapped column cache 对连续 16 x 16 整数列存在显著 hash collision；容量等于
-  chunk 列数不等于无冲突。P4.7-0 必须先记录 hit/miss/collision/owner swap/raw-top evaluation，再比较
-  chunk-local tag、set-associative 或 final immutable tile cache，禁止无测量重写缓存。
-- 当前 `PerformanceBenchmarkTest` 的 5,000 次预热、50,000 次测量和平均 `ns/op` 只有 DCE guard，没有
-  threshold、multi-fork、p50/p95、allocation、cache 或 JFR 门禁。它只能作为观测工具；P4.7 正式接线前
-  必须建立 P4.6 smoke profile 的 cold/warm、chunk-like traversal、allocation 与四组合 JFR 基线。
+  chunk 列数不等于无冲突。P4.7-0A 已记录 hit/miss/collision/owner swap、完整 height evaluation 和
+  raw-top evaluation；在 JFR 或候选 tile 指标证明必要前，禁止凭推测改成 chunk-local tag、set-associative
+  或 final immutable tile cache。
+- `PerformanceBenchmarkTest` 的传统 5,000 次预热、50,000 次测量和平均 `ns/op` 仍只有 DCE guard，
+  不能替代真实 JFR。P4.7-0A 已额外建立 P4.6 smoke profile 的 cold/warm、chunk-like traversal、cache
+  counters 和 `ThreadMXBean` allocation 观测；P4.7-0B 四组合 JFR 仍是 selection/production integration 前置。
 - 2026-07-23 已加入 24 次 full-column cold/warm 观测；一次完整 `:common:test` 在本机 JDK 21 记录
   cold p50/p95 `2.115/3.872 ms`、warm p50/p95 `1.452/3.161 ms`，且 checksum 相同。这些数值只用于
   追踪回归，不是跨硬件阈值；视觉和性能仍须在同一 fixture 与客户端矩阵中同时通过。
+- 2026-07-25 自动基线进一步区分两层成本：固定 P4.6 density 窗口的 256 次完整 height evaluation
+  对应 256 次 raw-top evaluation；一个 16 x 16 `sampleTerrainProfile` 窗口产生 256 次 profile request
+  和 1,280 次 raw-top evaluation。预热后的 4 个 full-column chunk 在本机 JDK 21 当前线程分配观测为
+  `0 bytes`。这些 test/dev counters 默认关闭、per-thread、无 atomic；零值只描述当前测量线程，不代表
+  tile build、C2ME worker、客户端或整机 allocation。
+- P4.7 的执行门禁分为两条轨道：自动基线闭环后可以继续 test-only 候选原型，四组合客户端/JFR 可并行
+  采集；但候选 selection、production cache 重写和 `EndDensity` 接入必须等待 JFR。tile peak bytes、
+  duplicate builds 和 single-flight/owner 生命周期属于每个实际 tile 候选的验收，不能在 tile 尚不存在时
+  伪造为 P4.7-0 前置数字。
 - P4.7 候选算法的 canonical test artifact 固定为 33 x 33 primitive grid、2-cell halo、4-block sample
   distance 和 Standard 512 derivative scale。fixture 同时携带 raw top、landness、inlandness、available
   thickness 与 archipelago-dominant gate；候选不得各自替换输入、halo 或采样尺度来取得更好结果。

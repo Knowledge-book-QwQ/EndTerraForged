@@ -5,6 +5,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import org.junit.jupiter.api.Test;
 
+import endterraforged.world.config.EndPreset;
+import endterraforged.world.config.EndPresetDevelopmentProfiles;
 import endterraforged.world.config.SeaMode;
 import endterraforged.world.config.TestProfile;
 import endterraforged.world.config.TerrainConfig;
@@ -71,6 +73,63 @@ class EndTerrainProfileTest {
         assertEquals(1024.0F, tallProfile.worldHeightBlocks(), 0.0F);
         assertTrue(standardProfile.slope() > 0.0F);
         assertTrue(standardProfile.curvature() > 0.0F);
+    }
+
+    @Test
+    void smokeProfileReportsFiveRawTopEvaluationsPerRequest() {
+        String property = EndPresetDevelopmentProfiles.P46_ARCHIPELAGO_SMOKE_TEST_PROPERTY;
+        String previous = System.getProperty(property);
+        System.setProperty(property, "true");
+        EndHeightmap.configureTerrainMetrics(true);
+        try {
+            int smokeSeed = 123456789;
+            EndPreset smoke = EndPresetDevelopmentProfiles.defaultFallback();
+            EndHeightmap heightmap = new EndHeightmap(smoke, smokeSeed);
+            EndTerrainProfileBuffer profile = new EndTerrainProfileBuffer();
+
+            for (int column = 0; column < 16 * 16; column++) {
+                float x = 8192.0F + (column & 15);
+                float z = 8192.0F + (column >>> 4);
+                heightmap.sampleTerrainProfile(x, z, smokeSeed, profile);
+            }
+
+            EndHeightmap.TerrainMetrics metrics = EndHeightmap.terrainMetrics();
+            assertEquals(16 * 16, metrics.terrainProfileRequests());
+            assertEquals(metrics.terrainProfileRequests() * 5, metrics.rawTopEvaluations());
+            System.out.printf(
+                    "[perf] p47TerrainProfile requests=%d rawTopEvaluations=%d%n",
+                    metrics.terrainProfileRequests(), metrics.rawTopEvaluations());
+        } finally {
+            EndHeightmap.configureTerrainMetrics(false);
+            if (previous == null) {
+                System.clearProperty(property);
+            } else {
+                System.setProperty(property, previous);
+            }
+        }
+    }
+
+    @Test
+    void scaledLegacyKnownLandnessCountsOneRawTopEvaluation() {
+        TerrainConfig terrain = new TerrainConfig(
+                0, 1600, 1.0F, 2.0F, 0.0F, TerrainLayoutMode.LEGACY_SELECTOR,
+                TerrainShape.SHATTERED_RIDGES,
+                TerrainLayerConfig.DISABLED, TerrainLayerConfig.DISABLED,
+                TerrainLayerConfig.DISABLED, TerrainLayerConfig.DEFAULT,
+                TerrainLayerConfig.DISABLED);
+        TestProfile profile = new TestProfile(512, -256, 0, 0, SeaMode.NONE,
+                TopologyMode.CONTINENTAL, false, terrain);
+        EndHeightmap heightmap = new EndHeightmap(profile, SEED);
+        EndHeightmap.configureTerrainMetrics(true);
+        try {
+            heightmap.getHeight(128.0F, -256.0F, SEED, 1.0F, 1.0F);
+
+            EndHeightmap.TerrainMetrics metrics = EndHeightmap.terrainMetrics();
+            assertEquals(1, metrics.rawTopEvaluations());
+            assertEquals(0, metrics.terrainProfileRequests());
+        } finally {
+            EndHeightmap.configureTerrainMetrics(false);
+        }
     }
 
     @Test

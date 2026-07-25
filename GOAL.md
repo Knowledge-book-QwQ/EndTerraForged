@@ -315,11 +315,16 @@ C2ME 兼容的最低要求：没有依赖线程顺序的随机数，没有跨 wo
 ## 六、当前总体判断
 
 - 当前版本：`0.1.7` 开发工作树。
-- 当前阶段：阶段 B 的 P2 外部大陆与 P3 有限大陆架已形成代码闭环，但当前地表仍只是原型。`EndTerrainComposer` 主要依赖一个低频选择噪声在若干通用层之间切换，缺少区域级地貌规划、成熟地貌族和有限形状特征，因此不能把现有截图质量视为可继续微调的最终架构。
-- 当前执行顺序：P4.6 客户端验收已闭环；现在先完成 P4.7-0 allocation/JFR 基线，再按统一 fixture
-  比较 local analytical + thermal、RTF-derived primitive hydraulic tile 和 bounded
-  Priority-Flood/flow/stream-power。获选组合接入 final top、volume 和同源 preview 后，必须先通过
-  Standard、RTF/C2ME 与客户端性能门禁，最后才开放 `format_version=4` 和玩家 UI。完整 3D 水文不
+- 当前阶段：阶段 B 的 P2 外部大陆与 P3 有限大陆架已形成代码闭环。玩家可持久化的 v3/legacy 地表仍是
+  `EndTerrainComposer` 低频 selector 原型；受控 `REGION_PLANNED` 已具备 AREA ownership、首批地貌族、
+  有限 RIDGE 和群岛海岸，但尚未完成侵蚀选型、final metrics、JFR、同源 production preview 与 v4 配置闭环，
+  因此不能把当前截图或内部 runtime 描述为发布质量。
+- 当前执行顺序：P4.6 客户端验收已闭环；P4.7-0A 的 cache、raw/full evaluation、cold/warm、
+  chunk traversal 和当前线程 allocation 自动基线已完成。四组合客户端/JFR 作为 P4.7-0B 独立采集，
+  同时允许在统一 fixture 上继续开发 test-only 的 local analytical + bounded thermal、RTF-derived
+  primitive hydraulic tile 和 bounded Priority-Flood/flow/stream-power 候选，但不得提前宣布胜出、
+  重写 production cache 或接入 `EndDensity`。获选组合接入 final top、volume 和同源 preview 前，必须
+  通过 Standard、RTF/C2ME 与客户端性能门禁，最后才开放 `format_version=4` 和玩家 UI。完整 3D 水文不
   塞进 P4.7，而是在 v4 地表验收后以 `format_version=5` 独立推进；Content Pack API 在稳定 hydrology
   字段之后冻结。火山继续作为独立后续课题。
 - 当前代码状态：`RTF_ADVANCED` 的纯数学、`Perlin2`、golden fixture、完整大陆信号以及
@@ -347,6 +352,7 @@ C2ME 兼容的最低要求：没有依赖线程顺序的随机数，没有跨 wo
   火山、badlands、torridonian、真实水文、动态世界规格和 3D 旋转预览在该切片通过客户端、JFR 与兼容矩阵后分阶段扩展。
 - 预计剩余工作量：约 34-50 个大段开发轮次，主要取决于 P4.7 算法选型、v5 hydrology artifact、
   Content Pack、C2ME/整合包兼容、宏大地下系统和高级预览的实测结果。
-- 当前最大风险：P4.7 尚缺 allocation 与四组合 JFR，候选可能在 fixture 中视觉优秀但在真实区块调度下
-  产生首 tile 峰值、重复构建或客户端渲染压力；完整 3D 水文只有研究与 proof，没有 ETF production runtime、
+- 当前最大风险：P4.7 尚缺四组合 JFR；未来 tile 候选还必须证明峰值 primitive bytes、重复构建、
+  single-flight/owner 生命周期和客户端渲染压力。当前自动基线只证明预热后的现有 density traversal
+  在本机观测为零当前线程分配，不代表 C2ME worker、tile build 或整机 allocation 已通过。完整 3D 水文只有研究与 proof，没有 ETF production runtime、
   跨 domain、JDK 21 replay 或 Minecraft 性能证据；Content Pack loader、动态世界规格和正式地下河仍未实现。

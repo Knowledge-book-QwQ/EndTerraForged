@@ -203,18 +203,20 @@ baseline 与候选台至少覆盖：
 
 ## 12. 实现切片
 
-1. **P4.7-0 performance baseline**：建立 P4.6 smoke profile 的 raw top、full column、chunk-like traversal、
-   cache counters、allocation 和 JFR 基线，不改变正式地形。
-2. **P4.7a local analytical baseline**：修正导数量纲，新增 immutable analytical runtime 与
+1. **P4.7-0A automated baseline**：建立 P4.6 smoke profile 的 raw top、full column、chunk-like traversal、
+   cache counters 和 current-thread allocation 基线，不改变正式地形；当前已完成。
+2. **P4.7-0B client/JFR baseline**：按 ETF、ETF+C2ME、ETF+RTF、ETF+RTF+C2ME 采集服务器/客户端
+   JFR。它可与 test-only candidate 编码并行，但 selection 和 production integration 必须等待其闭环。
+3. **P4.7a local analytical baseline**：修正导数量纲，新增 immutable analytical runtime 与
    caller-owned output，只跑纯单元测试和统一 fixture，不接正式 top。
-3. **P4.7b candidate bake-off**：先完成 bounded thermal 对照，再以同一 primitive input artifact
-   比较 RTF-derived hydraulic SoA tile 与 Priority-Flood + adaptive flow + stream-power。2024
-   analytical/multigrid 只在这些候选均失败时恢复。
-4. **P4.7c selection/density integration**：选择满足视觉和性能门禁的最小组合，只对受控
+4. **P4.7b candidate bake-off**：先完成 bounded thermal 对照，再建立 test-only canonical tile substrate
+   与 peak/duplicate instrumentation，并以同一 primitive input artifact 比较 RTF-derived hydraulic SoA
+   tile 与 Priority-Flood + adaptive flow + stream-power。2024 analytical/multigrid 只在这些候选均失败时恢复。
+5. **P4.7c selection/density integration**：选择满足视觉和性能门禁的最小组合，只对受控
    `REGION_PLANNED` 接入列缓存，完成 volume 与零影响门禁。
-5. **P4.7d preview/parity**：REGION_PLANNED preview 改为同源 runtime，legacy droplet preview 保留。
-6. **P4.7e final metrics**：在 erosion/smoothing 后计算 final slope、curvature 和 void-edge metrics。
-7. **P4.7f dry drainage geometry**：只接有界干谷、裂谷或悬空排水槽几何，不接水体，不发布
+6. **P4.7d preview/parity**：REGION_PLANNED preview 改为同源 runtime，legacy droplet preview 保留。
+7. **P4.7e final metrics**：在 erosion/smoothing 后计算 final slope、curvature 和 void-edge metrics。
+8. **P4.7f dry drainage geometry**：只接有界干谷、裂谷或悬空排水槽几何，不接水体，不发布
    receiver/reach/bed/water authority；完整水文由
    [`P5_3D_HYDROLOGY_ARCHITECTURE_PLAN.md`](P5_3D_HYDROLOGY_ARCHITECTURE_PLAN.md) 管理。
 

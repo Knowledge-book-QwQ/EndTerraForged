@@ -25,7 +25,8 @@ raw top + ownership/thickness/protection masks
 
 短期实现顺序调整为：
 
-1. 先修正 profile 导数量纲并建立 P4.6 性能基线、缓存指标和统一 tile benchmark。
+1. 先修正 profile 导数量纲并建立 P4.6 性能基线、缓存指标和统一 tile benchmark。2026-07-25
+   已完成现有 production density 的自动基线；四组合客户端/JFR 继续作为独立实机轨道。
 2. 保留现有五点 analytical 作为低成本 baseline 和明确 fallback，不预先宣布它是最终算法。
 3. 对 bounded thermal、RTF-derived hydraulic primitive tile、Priority-Flood + flow accumulation +
    stream-power 三条候选做同图对比。2024 analytical/multigrid 因缺少成熟、可验证的 Java 21/Minecraft
@@ -33,8 +34,8 @@ raw top + ownership/thickness/protection masks
 4. 只有候选同时通过视觉、边界、访问顺序、C2ME、首块延迟、内存和 JFR 门禁，才接入
    `EndDensity` 的正式列刷新。
 
-因此，P4.7 下一步确实是侵蚀，但第一道工程任务不是立刻移植某套侵蚀，而是建立能淘汰错误方案的
-基准与性能证据。
+因此，P4.7 下一步确实是侵蚀。自动基线闭环后可以继续 test-only 候选原型，但 JFR、tile 峰值和
+重复构建证据仍必须在 selection 与 production integration 前淘汰错误方案。
 
 ## 2. 项目事实与验证来源
 
@@ -369,7 +370,10 @@ tile X/Z 和必要的 Content-independent terrain version。不能使用对象 i
 
 ### P4.7-0：测量与候选台
 
-- 建立 P4.6 region-planned 性能基线、cache instrumentation 和统一 tile fixture。
+- P4.7-0A 已建立 P4.6 region-planned 的 cache、raw/full evaluation、cold/warm、chunk traversal 和
+  current-thread allocation 自动基线。
+- P4.7-0B 按四组合采集客户端/服务器 JFR；该轨道可与 test-only 候选编码并行，但必须在选型前闭环。
+- tile peak bytes、duplicate build、owner/single-flight 与多 worker 指标在实际 tile 候选建立后记录。
 - 将现有 JUnit `ns/op` 从人工输出补成可重复的相对比较；产品门禁仍以 JFR/MSPT 为准。
 - 此阶段不改变正式地形。
 
@@ -412,4 +416,5 @@ tile X/Z 和必要的 Content-independent terrain version。不能使用对象 i
 - thermal/talus 只做有界收尾。
 - GPU、SPH、无界全局缓存和私有 executor 不进入正式 runtime。
 
-完成 P4.7-0 的统一 benchmark 后，再用数据决定 P4.7b 哪一条进入正式 `EndDensity`。
+P4.7-0A 完成后开始 P4.7b 的 test-only 候选台；只有 P4.7-0B JFR 与候选自身的 tile/visual/volume
+门禁全部完成后，才用数据决定哪一条进入正式 `EndDensity`。

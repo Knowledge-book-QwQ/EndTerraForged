@@ -11,13 +11,13 @@
 - 默认世界规格：Standard，`min_y=-256`、`height=512`。
 - RTF 核心复用策略：对于 MIT 许可且能独立验证的大陆、海岸、地貌、形状化放置和噪声 primitive，优先直接移植并保留原版权头、来源说明和 `NOTICE.md` 记录；不再仅以“参考思路”替代成熟实现。ETF 继续保留末地体积、中央保护、平台边界、并发缓存和原创 UI。
 - 2026-07-18 已审查 RTF 最新 `codex/r10x-volcano-rt4-fluid-routing` 工作树：火山区域 artifact、provenance、bounded cache、single-flight、生命周期、RT4 流体路由和高世界优化研究可作为 ETF 后续契约参考；RTF 工作树保持只读，不能把其未提交代码或游戏证据缺口写成 ETF 已完成功能。ETF 当前 `EndTerrainVolcanoRuntime` 仍是封闭的 analytical COMPACT 草稿，P4 先完成地表、兼容性、C2ME parity 和 Standard JFR 门禁。
-- RTF 地表复用的权威实现规格见 [`docs/RTF_CORE_REUSE_RESEARCH.md`](docs/RTF_CORE_REUSE_RESEARCH.md)。`R0/R1/R2` 已完成 golden parity、显式 `RTF_MULTI` runtime、末地分带与有限 shelf 的代码闭环；但当前 `EndTerrainComposer` 仍主要是“单一选择噪声 + 通用 Perlin 层”，没有 terrain region、成熟地貌族和有限 ridge/compact feature，因此当前视觉质量只能视为原型。
+- RTF 地表复用的权威实现规格见 [`docs/RTF_CORE_REUSE_RESEARCH.md`](docs/RTF_CORE_REUSE_RESEARCH.md)。`R0/R1/R2` 已完成 golden parity、显式 `RTF_MULTI` runtime、末地分带与有限 shelf 的代码闭环；玩家可持久化的 v3/legacy `EndTerrainComposer` 仍是“单一选择噪声 + 通用 Perlin 层”原型。受控 `REGION_PLANNED` 已完成 AREA ownership、首批地貌族、有限 RIDGE 与群岛海岸，但未完成 P4.7、final metrics、JFR、production preview 和 v4 配置闭环，因此当前视觉质量仍不能视为发布质量。
 - 2026-07-18 路线校正：RTF 最新地形区架构已经用预览和实机证据否决“RIDGE 拥有完整宏观区域”的 S4.2 语义。P4 的首个生产契约由正权重 `AREA` 地貌组成统一、无空洞的 terrain ownership 分区；`RIDGE` 使用独立、有界 anchor overlay，不能夺取宏观 owner。RTF 最新火山线已有较成熟候选，但 ETF 当前仍因阶段范围和末地语义冻结 `COMPACT`，不将其纳入本轮 ownership。完整结论见 [`docs/reviews/RTF_TERRAIN_REGION_ARCHITECTURE_REVIEW_2026-07-18.md`](docs/reviews/RTF_TERRAIN_REGION_ARCHITECTURE_REVIEW_2026-07-18.md)。
-- P4.6 精确 jar 的新世界和 ETF/RTF/C2ME 客户端验收已闭环。当前最高优先级是 P4.7-0：先为
-  `REGION_PLANNED + archipelago` 建立可重复的缓存、allocation、cold/warm、chunk traversal 和四组合 JFR
-  基线，再比较 local analytical + thermal、RTF-derived hydraulic primitive tile 与
-  bounded Priority-Flood/flow/stream-power 候选。2024 analytical/multigrid 暂为研究储备；当前 legacy
-  terrain 只作为迁移与性能基线，不继续投入大段视觉修补。
+- P4.6 精确 jar 的新世界和 ETF/RTF/C2ME 客户端验收已闭环。P4.7-0A 自动基线现已覆盖 cache、
+  raw/full evaluation、cold/warm、chunk traversal 和当前线程 allocation；P4.7-0B 四组合客户端/JFR
+  由独立实机轨道采集。代码开发继续进入 test-only candidate bake-off，但在四组合 JFR、tile peak bytes
+  和 duplicate build 门禁完成前，不得宣布候选胜出、重写 production cache 或接入 `EndDensity`。
+  2024 analytical/multigrid 暂为研究储备；当前 legacy terrain 只作为迁移与性能基线，不继续投入大段视觉修补。
 - 原版主岛、黑曜石柱、龙战、返回门、网关及外围区域当前冻结，不属于近期修改范围。
 - 内容扩展路线已从 biome-only 升级为 ETF Worldgen Content Pack API；当前仅有规格，没有 loader/runtime。
 - 地下继续使用 ETF 自研路线，不采用 RTF cave；P4 高质量地表完成前不新增洞穴功能。
@@ -387,18 +387,26 @@ surface、structure 与后续 Content Pack 只能消费这些正式信号，禁�
 - [x] 2026-07-25 增加 JDK 21 `ThreadMXBean` warm traversal allocation 观测；排除 profile、runtime、输出与
   首次 owner swap 后，4 个 16 x 16 full-column chunk 在本机记录 `0 bytes`。不支持线程分配计数的 JVM
   明确跳过测试，不伪造零值；该结果不替代 tile peak、C2ME worker 或 JFR allocation 证据。
+- [x] 2026-07-25 在 `EndHeightmap` 的 raw terrain 边界增加仅测试/dev、per-thread 指标：固定 P4.6
+  density 窗口的 ordered/shuffled 均为 256 次 raw-top evaluation；一个 16 x 16 profile 窗口为
+  256 次 profile request 和 1,280 次 raw-top evaluation，精确记录当前五点 stencil 的 5 倍放大。
 - [x] 2026-07-23 建立候选算法共用的 test-only primitive fixture：固定 33 x 33、2-cell halo、4-block sample
   distance 与 Standard 512 导数量纲，覆盖 flat、plane、paraboloid、isolated spike、ridge、plateau edge、
   closed basin、watershed、coast/thin shelf 和 archipelago window；候选必须消费同一 input artifact。
-- [ ] **P4.7-0 close**：补内部 raw-top evaluation、tile peak bytes、cache duplicate builds，以及
-  ETF、ETF+C2ME、ETF+RTF、ETF+RTF+C2ME 四组合服务器/客户端 JFR。没有这些证据，不得宣布任何候选胜出。
+- [x] **P4.7-0A automated baseline**：当前 production density 的 cache、raw/full evaluation、
+  cold/warm、chunk traversal 和 warm current-thread allocation 已形成固定 smoke fixture；不改变地形。
+- [ ] **P4.7-0B client/JFR baseline**：按 ETF、ETF+C2ME、ETF+RTF、ETF+RTF+C2ME 顺序采集服务器/客户端
+  JFR、MSPT、GC、render/mesh 和 C2ME delegate 证据。该轨道不阻塞 test-only 候选编码，但在 selection
+  和 production integration 前必须闭环。
+- [ ] 每个 tile 候选在自己的 benchmark 中记录 tile peak primitive bytes、duplicate builds、cold/warm
+  build p50/p95、owner swap、eviction 和 1/2/4/6 worker checksum；tile 尚不存在时不伪造这些数值。
 - [x] 2026-07-23 完成 local analytical baseline：immutable `EndAnalyticalErosionRuntime` 与 caller-owned
   `EndAnalyticalErosionBuffer` 实现 slope/curvature、ridge protection、valley diagnosis、roughness/resistance、
   landness/inlandness、outer activation 和 thickness 门控；canonical fixture 观测 `39.1 ns/sample`，仅为
   primitive 成本，不代表列缓存、NoiseChunk、C2ME 或客户端性能。
-- [ ] **P4.7b candidate bake-off**：先实现 bounded thermal 对照；再以同一 primitive input artifact 比较
-  RTF droplet 的 primitive SoA/canonical tile 与 Priority-Flood + adaptive flow + stream-power 的有界地表版本。
-  2024 multigrid 保持研究储备。
+- [ ] **P4.7b candidate bake-off**：先实现无缓存、固定 pass/radius 的 bounded thermal 对照；再建立仅测试的
+  canonical primitive tile substrate 与 peak/duplicate instrumentation；随后以同一 input artifact 比较
+  RTF droplet primitive SoA tile 与 Priority-Flood + adaptive flow + stream-power。2024 multigrid 保持研究储备。
 - [ ] **P4.7c selection**：以视觉质量、volume safety、首块 p95、内存、分块边界、访问顺序、C2ME 和 JFR
   为同等硬门禁，选择最小组合；未同时通过不得接入正式 `EndDensity`。
 - [ ] **P4.7d production integration**：获选组合只对受控 `REGION_PLANNED` 接入列缓存或 final immutable tile
@@ -536,7 +544,7 @@ Windows 中文路径异常时按 [`AGENTS.md`](AGENTS.md) 使用 ASCII `subst`/j
 - P4 会替换当前地貌编排架构；必须保留 `LEGACY_SELECTOR` 迁移路径，不能让已有 v3 世界随 jar 更新改变未生成区块的地貌区域。
 - 当前 RTF 开发分支的 variable region、shape-aware placement 与火山 artifact 已形成有价值候选，
   但 ETF 只能按具体来源版本、fixture、末地语义和性能结果分模块接入，不能整套默认启用。
-- 当前工作树很脏，修改前必须区分已有用户/历史改动。
+- 当前分支已整理并与远端同步；每个后续切片仍需先检查 `git status`，不得覆盖新出现的用户修改。
 - 客户端卡顿包含 render/debug overlay 成分，不能只看总 CPU 或单一 MSPT。
 - Content Pack 的 surface depth、palette 执行方式和 pack 持久化尚未冻结。
 - Terra 官方不支持 NeoForge，ReimagEND 为 GPL-3.0 且 WIP；兼容必须通过 ETF 内容适配，不得承诺原包直接运行。

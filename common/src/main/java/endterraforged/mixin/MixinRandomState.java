@@ -149,9 +149,7 @@ public class MixinRandomState implements EndRandomStateAccess {
     }
 
     @Inject(
-            method = "create(Lnet/minecraft/world/level/levelgen/NoiseGeneratorSettings;"
-                    + "Lnet/minecraft/core/HolderGetter;J)"
-                    + "Lnet/minecraft/world/level/levelgen/RandomState;",
+            method = "create(Lnet/minecraft/world/level/levelgen/NoiseGeneratorSettings;Lnet/minecraft/core/HolderGetter;J)Lnet/minecraft/world/level/levelgen/RandomState;",
             at = @At("HEAD")
     )
     private static void endTerraForged$captureSettingsCreate(

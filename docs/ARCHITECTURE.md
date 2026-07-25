@@ -1,7 +1,7 @@
 # EndTerraForged 架构说明
 
 > 文档状态：当前有效。
-> 最近更新：2026-07-15。
+> 最近更新：2026-07-25。
 > 本文定义模块边界、数据流、线程安全和扩展点；产品阶段以 [`../GOAL.md`](../GOAL.md) 为准。
 
 ## 1. 架构目标
@@ -146,8 +146,12 @@ flowchart TD
     S --> H
     C --> U["Archipelago / coast"]
     U --> H
-    H --> E["Erosion / drainage"]
-    E --> V["EndLandmassVolume"]
+    H --> E["Surface erosion / drainage diagnostics"]
+    E --> M["Accepted macro top + final metrics"]
+    M --> V["EndLandmassVolume"]
+    M --> Y["v5 hydrology artifact (future)"]
+    Y --> K["Bed/water profile + bounded corridor"]
+    K --> V
     V --> D["EndDensity"]
     C --> W["Preview"]
     R --> W
@@ -162,10 +166,11 @@ flowchart TD
 5. **Base terrain families**：平原、丘陵、高原和 AREA 山地等固定核心 family 只输出 height、roughness、erosion resistance 和 terrain tags。同一 ownership region 可按 seed/region/family 选择稳定 morphology variant；family 不访问 registry、Content Pack 或 Minecraft 平台 API。
 6. **Shape-aware morphology**：RIDGE 使用独立、确定性、有界 anchor overlay，不参与宏观 ownership。每点最多组合三个候选，relief 取最大值，最强 physical influence 决定可见 identity 和信号元数据；footprint 外严格保留真实 AREA owner 与信号。COMPACT 火山在当前阶段冻结，后续另行定义 ownership 与末地体积语义。
 7. **Archipelago / coast**：附属群岛使用大陆 edge 与同一 volume，不生成海床，也不复用高空浮岛系统；不按大陆中心距离额外抬升整体地形。
-8. **Erosion / drainage**：先对稳定 raw top 做 analytical erosion；高成本 hydraulic tile 只能区域对齐、带 border、worker-owned 且有界缓存。侵蚀不重新选择大陆或 terrain family。
-9. **Vertical volume**：`EndLandmassVolume` 把最终 top surface 与大陆 underside 组合为真实浮空体积。`FLOATING_SHELF` 先按 landness 平滑插值得到边缘/主体厚度，再乘同一 `edgeFade`，使厚度在 void 边界收敛到零而不是形成实体直壁；新默认使用有限 shelf，只有显式/迁移的 `LEGACY_COLUMN` 才继续按 SeaMode 填充整列。underside 是 column cache 的一部分，不能在每个 density Y 采样中重复计算。
-10. **Subsurface carve**：在实体体积中切削深渊和洞穴。
-11. **Content selection/surface**：消费地形、气候、深度和 Content Pack，不反向修改 density，也不越过中央保护边界。
+8. **Surface erosion / drainage diagnostics**：P4.7 先对稳定 raw top 做候选 bake-off；高成本 tile 必须区域对齐、带 border、worker-owned 且有界缓存。它不重新选择大陆或 terrain family，也不发布水面 authority。
+9. **3D hydrology artifact（`format_version=5`，未来）**：从已验收的 macro top、finite volume 和 ocean/terminal halo 建立 depression hierarchy、receiver DAG、physical-area accumulation、shared reach 以及唯一的 bed/water profile。`routing potential != authoritative bed/water profile != visible corridor`；大陆中心不得生成水头或水位。
+10. **Vertical volume**：无水文的 v4 直接由 accepted macro top 进入 `EndLandmassVolume`；v5 先由 hydrology 的有界 corridor 更新 final top，再与大陆 underside 组合为真实浮空体积。`FLOATING_SHELF` 先按 landness 平滑插值得到边缘/主体厚度，再乘同一 `edgeFade`，使厚度在 void 边界收敛到零而不是形成实体直壁；新默认使用有限 shelf，只有显式/迁移的 `LEGACY_COLUMN` 才继续按 SeaMode 填充整列。underside 是 column cache 的一部分，不能在每个 density Y 采样中重复计算。
+11. **Subsurface carve**：在实体体积中切削深渊和洞穴。后续地下河扩展 v5 的 shared reach/profile authority，不创建第二套 water table。
+12. **Content selection/surface**：消费地形、气候、稳定 hydrology context、深度和 Content Pack，不反向修改 density，也不越过中央保护边界。
 
 `TerrainRegionPlan`、family 输出和最终 top 必须在同一 X/Z 列缓存刷新中计算一次并复用给整列。
 preview 通过相同 primitive 分别输出 AREA ownership、visible family、RIDGE physical influence、

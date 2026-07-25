@@ -1,7 +1,7 @@
 # P4.7 侵蚀、排水与性能方案调研
 
 > 文档状态：当前有效，算法选型调研；不代表 runtime 已实现。
-> 最近更新：2026-07-23。
+> 最近更新：2026-07-25。
 > 调研时间点：仓库、许可证和维护状态均以 2026-07-22 的上游事实为准。
 > 实现契约见 [`P4_7_ANALYTICAL_EROSION_SPEC.md`](P4_7_ANALYTICAL_EROSION_SPEC.md)。
 
@@ -27,8 +27,9 @@ raw top + ownership/thickness/protection masks
 
 1. 先修正 profile 导数量纲并建立 P4.6 性能基线、缓存指标和统一 tile benchmark。
 2. 保留现有五点 analytical 作为低成本 baseline 和明确 fallback，不预先宣布它是最终算法。
-3. 对 RTF-derived hydraulic、2024 analytical/multigrid、Priority-Flood + flow accumulation +
-   stream-power 三条候选做同图对比。
+3. 对 bounded thermal、RTF-derived hydraulic primitive tile、Priority-Flood + flow accumulation +
+   stream-power 三条候选做同图对比。2024 analytical/multigrid 因缺少成熟、可验证的 Java 21/Minecraft
+   实现保留为研究储备，只有前三条均无法达标时才恢复。
 4. 只有候选同时通过视觉、边界、访问顺序、C2ME、首块延迟、内存和 JFR 门禁，才接入
    `EndDensity` 的正式列刷新。
 
@@ -225,9 +226,10 @@ ETF 只吸收以下跨项目不变量：
 - compiler scratch 在 publication 前释放，正式采样只读 immutable primitive artifact，禁止逐区块
   flood-fill、跨区块搜索、访问顺序 authority 或 private worldgen executor。
 
-P4.7 仍只负责表面 erosion 与 drainage potential 的候选比较，不在本阶段实现完整 3D 河网、水面、
-湖泊、原版水或 hydrology cache lifecycle。RTF 的 `GeneratorContext`、`Cell`、`waterTable`、legacy
-gasket/surface 和 `LEGACY_UPLIFT` 兼容路径不进入 ETF。
+P4.7 仍只负责表面 erosion、dry drainage potential 与有界 incision 的候选比较，不在本阶段实现完整
+3D 河网、水面、湖泊、receiver/reach artifact、bed/water profile 或 hydrology cache lifecycle。
+这些职责属于独立的 [`P5_3D_HYDROLOGY_ARCHITECTURE_PLAN.md`](P5_3D_HYDROLOGY_ARCHITECTURE_PLAN.md)。
+RTF 的 `GeneratorContext`、`Cell`、`waterTable`、legacy gasket/surface 和 `LEGACY_UPLIFT` 兼容路径不进入 ETF。
 
 ## 5. 开源仓库审查
 
@@ -259,7 +261,7 @@ Immensa 的 MIT 文件允许依法复用，但它本身派生自 terrain-diffusi
 | --- | --- | --- | --- | --- | --- | --- |
 | 五点局部 analytical | 中低 | 低，但现实现会重复 5 次 raw top | 极低 | 天然连续 | 低 | baseline/fallback，不预定为最终效果 |
 | RTF-derived droplet SoA tile | 高 | 中高，受 droplet x lifetime x brush 支配 | 中 | 需要 canonical tile + halo | 中 | 最强直接视觉候选 |
-| 2024 analytical + multigrid tile | 高 | 未知，预期中 | 中高 | 需要严格边界条件 | 高 | 高质量研究首选，先做原型 |
+| 2024 analytical + multigrid tile | 高 | 未知，预期中 | 中高 | 需要严格边界条件 | 高 | 研究储备；前三条候选均失败时再做原型 |
 | Priority-Flood + D8/D-infinity + stream power | 高，偏宏观河谷 | 中；routing 后可接 O(n) solver | 中 | outlet/catchment 最难 | 很高 | 最有希望的长期 drainage 主线 |
 | bounded thermal/talus | 中 | 低至中 | 低 | 固定 halo 可证明 | 无 | 组合收尾，不单独交付 |
 | GPU shallow-water / SPH | 高 | GPU 快、CPU/兼容成本高 | 高 | 难 | 高 | 排除正式 runtime，只作研究参考 |
@@ -376,12 +378,12 @@ tile X/Z 和必要的 Content-independent terrain version。不能使用对象 i
 - 修正导数量纲，完成五点 baseline 和零影响边界。
 - 只作为 fallback、oracle 和候选对照；在算法 bake-off 前不进入玩家 preset/UI。
 
-### P4.7b：三候选原型
+### P4.7b：候选原型
 
+- bounded thermal 先与 local analytical 组成最低成本对照。
 - RTF droplet 改写为 primitive SoA tile。
-- 2024 analytical/multigrid 做最小 CPU tile 原型。
-- Priority-Flood + D8/D-infinity + stream-power 做 drainage/incision 原型。
-- bounded thermal 作为三者都可选的统一收尾 pass。
+- Priority-Flood + adaptive flow + stream-power 做 bounded drainage/incision 原型，不发布水文 authority。
+- 2024 analytical/multigrid 保留在研究名单；只有以上候选均无法通过质量或性能门禁时才投入实现。
 
 ### P4.7c：选择与正式接入
 
@@ -405,8 +407,8 @@ tile X/Z 和必要的 Content-independent terrain version。不能使用对象 i
 
 - local analytical 是 baseline，不是默认冠军。
 - RTF hydraulic 是必须参与比较的高质量候选，但只移植数学，不移植架构。
-- Priority-Flood/D-infinity/stream-power 是长期排水主线候选。
-- 2024 analytical/multigrid 是高质量 CPU 候选。
+- Priority-Flood/adaptive-flow/stream-power 是长期排水主线候选，但 P4.7 只验证其有界地表版本。
+- 2024 analytical/multigrid 是未激活的研究储备，不占用当前实现队列。
 - thermal/talus 只做有界收尾。
 - GPU、SPH、无界全局缓存和私有 executor 不进入正式 runtime。
 

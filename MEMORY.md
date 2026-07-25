@@ -1,7 +1,7 @@
 # EndTerraForged 项目记忆
 
 > 文档状态：当前有效。
-> 最近整理：2026-07-23。
+> 最近整理：2026-07-25。
 > 本文件只记录长期有效的架构决策、踩坑和兼容经验；当前任务见 [`PLAN.md`](PLAN.md)，完整产品路线见 [`GOAL.md`](GOAL.md)。
 
 ## 1. 产品与平台决策
@@ -352,3 +352,29 @@
 - REGION_PLANNED preview 必须消费同一 analytical runtime。旧 `PreviewErosionGrid` 只保留为 v3 droplet
   参数的兼容预览，不得进入正式 density。详细契约见
   [`docs/P4_7_ANALYTICAL_EROSION_SPEC.md`](docs/P4_7_ANALYTICAL_EROSION_SPEC.md)。
+
+## 16. 2026-07-25 版本化地表、水文与 Content Pack 顺序
+
+- `format_version=4` 的职责冻结为高质量宏观地表：AREA ownership、有限 RIDGE、海岸群岛、获选的
+  表面侵蚀组合、final metrics、finite volume、同源 preview 和 Standard/RTF/C2ME/JFR 门禁。
+  v4 不生成 authoritative river/lake water profile，也不在 jar 更新后静默获得真实水文。
+- 完整 3D hydrology 使用新的 `format_version=5`。它从已经验收的 final macro terrain 与 finite
+  volume 出发，按 bounded domain -> depression/terminal -> provisional MFD -> deterministic
+  single receiver -> physical-area accumulation -> shared reach graph -> outlet-first feasible profile ->
+  pool/step/cascade -> corridor/water 的顺序工作。大陆中心只可用于 ownership、seed、domain/cache
+  identity 和诊断，不能产生水头、receiver、bed 或 water elevation。
+- ETF 长期保持三个 authority 分离：`routing potential != authoritative bed/water profile != visible
+  terrain corridor`。surface、真实水体、preview、Content Pack 和未来地下河必须读取同一个 immutable
+  primitive hydrology artifact，禁止各自从地形或大陆中心重算水位。
+- Content Pack API v1 在 v5 hydrology 语义稳定后冻结。原因是当前规格希望公开 drainage、sediment、
+  reach/lake 和 bed/water profile；在生产 artifact 之前冻结这些字段会把诊断标量误写成长期 API。
+- P4.7 候选台收束为三条必须比较的路线：local analytical + bounded thermal、RTF-derived primitive
+  hydraulic tile、bounded Priority-Flood/flow/stream-power。2024 analytical/multigrid 因缺少成熟、
+  可许可复用且可在 Java 21/Minecraft 中独立验证的实现，降为前三条均不达标时才恢复的研究储备。
+- P4.7 的 analytical runtime 已实现为 immutable test-only candidate，并通过 canonical fixture 与
+  量纲测试；它尚未进入 `EndDensity` 或 production preview，不得再把规格写成“runtime 未实现”，
+  也不得把 `39.1 ns/sample` 当作正式区块性能证据。
+- 3D 水文规划权威文档为
+  [`docs/P5_3D_HYDROLOGY_ARCHITECTURE_PLAN.md`](docs/P5_3D_HYDROLOGY_ARCHITECTURE_PLAN.md)。
+  RTF R10X proof 只证明算法契约可行；JDK 21 replay、Minecraft runtime、跨 domain、缓存生命周期、
+  C2ME、真实客户端和 JFR 仍是 ETF 自己的门禁。

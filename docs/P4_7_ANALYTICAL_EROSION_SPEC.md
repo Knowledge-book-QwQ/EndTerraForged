@@ -1,7 +1,7 @@
 # P4.7 Analytical Erosion 技术规格
 
-> 文档状态：当前有效；低成本 analytical baseline 契约已冻结，正式算法尚未选定，runtime 尚未实现。
-> 最近更新：2026-07-22。
+> 文档状态：当前有效；低成本 analytical baseline 的 test-only runtime 已实现，正式算法尚未选定，尚未接入 production density/preview。
+> 最近更新：2026-07-25。
 > 当前阶段：P4.6 客户端验收完成后，P4.7 候选基准中的低成本对照实现。
 > 算法选型与性能架构见 [`P4_7_EROSION_ALGORITHM_RESEARCH.md`](P4_7_EROSION_ALGORITHM_RESEARCH.md)。
 
@@ -26,8 +26,9 @@ raw top
 metrics、排水几何和 hydraulic tile 按后续候选切片评审；任何获选组合仍须保持
 `raw top -> erosion/incision -> smoothing -> final metrics -> continuity correction -> volume` 的总体顺序。
 
-P4.7 在接正式 density 前先比较本 baseline、RTF-derived hydraulic primitive tile、2024
-stream-power analytical/multigrid tile，以及 Priority-Flood + flow accumulation + stream-power。
+P4.7 在接正式 density 前先比较本 baseline + bounded thermal、RTF-derived hydraulic primitive
+tile，以及 bounded Priority-Flood + flow accumulation + stream-power。2024 analytical/multigrid
+因缺少成熟、可验证的 Java 21/Minecraft 实现而降为研究储备，只在前三条均无法达标时恢复。
 算法选择依据视觉、首块延迟、内存、分块连续性、访问顺序、C2ME 和 JFR，而不是来源偏好。
 
 ## 2. 项目与验证来源
@@ -52,6 +53,8 @@ stream-power analytical/multigrid tile，以及 Priority-Flood + flow accumulati
 4. 旧 `Erosion` / `ErosionFactory` 是可变 droplet tile 原型，目前只有 `TerrainPreviewSampler` 的
    `PreviewErosionGrid` 使用。其参数已进入 v3 Codec、Builder 和 UI，不能改义为新 analytical runtime。
 5. 旧 preview 会分配 `Cell[]` 并运行独立 droplet 数学，不能作为 P4.7 正式 runtime。
+6. `EndAnalyticalErosionRuntime` 与 caller-owned `EndAnalyticalErosionBuffer` 已实现，并在 canonical
+   fixture、确定性、零影响边界和性能观测中使用；当前没有 production `EndDensity` 或 preview caller。
 
 ## 4. 第一切片边界
 
@@ -192,8 +195,8 @@ baseline 与候选台至少覆盖：
 8. `EndDensity` final top 与 underside 使用同一侵蚀结果，volume 不出现直壁、负厚度或无限尾部。
 9. 热路径在 ThreadLocal/cache 初始化后零对象分配；记录相对 P4.6 baseline 的列刷新和区块生成开销。
 10. cold/warm p50/p95、allocated bytes、raw-top evaluation、cache collision/eviction 和 tile peak bytes。
-11. 同一 input artifact 下的 local analytical、RTF-derived hydraulic、2024 analytical/multigrid、
-    Priority-Flood/flow/stream-power 视觉与性能对照。
+11. 同一 input artifact 下的 local analytical + thermal、RTF-derived hydraulic 和
+    Priority-Flood/flow/stream-power 视觉与性能对照；2024 multigrid 只保留研究记录。
 
 验证顺序：定点测试 -> `:common:test` -> `:neoforge:compileJava` -> `:fabric:compileJava` ->
 `:verifyReleaseArtifacts --no-daemon` -> 新世界真实客户端 -> ETF/RTF/C2ME 矩阵 -> JFR。
@@ -204,14 +207,16 @@ baseline 与候选台至少覆盖：
    cache counters、allocation 和 JFR 基线，不改变正式地形。
 2. **P4.7a local analytical baseline**：修正导数量纲，新增 immutable analytical runtime 与
    caller-owned output，只跑纯单元测试和统一 fixture，不接正式 top。
-3. **P4.7b candidate bake-off**：以同一 primitive input artifact 比较 RTF-derived hydraulic SoA tile、
-   2024 analytical/multigrid、Priority-Flood + D8/D-infinity + stream-power；bounded thermal 只作统一
-   可选收尾。
+3. **P4.7b candidate bake-off**：先完成 bounded thermal 对照，再以同一 primitive input artifact
+   比较 RTF-derived hydraulic SoA tile 与 Priority-Flood + adaptive flow + stream-power。2024
+   analytical/multigrid 只在这些候选均失败时恢复。
 4. **P4.7c selection/density integration**：选择满足视觉和性能门禁的最小组合，只对受控
    `REGION_PLANNED` 接入列缓存，完成 volume 与零影响门禁。
 5. **P4.7d preview/parity**：REGION_PLANNED preview 改为同源 runtime，legacy droplet preview 保留。
 6. **P4.7e final metrics**：在 erosion/smoothing 后计算 final slope、curvature 和 void-edge metrics。
-7. **P4.7f drainage geometry**：只接干谷、裂谷或悬空排水槽几何，不接水体。
+7. **P4.7f dry drainage geometry**：只接有界干谷、裂谷或悬空排水槽几何，不接水体，不发布
+   receiver/reach/bed/water authority；完整水文由
+   [`P5_3D_HYDROLOGY_ARCHITECTURE_PLAN.md`](P5_3D_HYDROLOGY_ARCHITECTURE_PLAN.md) 管理。
 
 ## 13. 完成定义
 

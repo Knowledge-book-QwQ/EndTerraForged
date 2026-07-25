@@ -1,7 +1,7 @@
 # EndTerraForged 当前执行计划
 
 > 文档状态：当前有效，只维护当前事实、执行队列、验收和阻塞。
-> 最近更新：2026-07-23。
+> 最近更新：2026-07-25。
 > 长期目标见 [`GOAL.md`](GOAL.md)，长期决策见 [`MEMORY.md`](MEMORY.md)。
 
 ## 1. 当前结论
@@ -14,10 +14,10 @@
 - RTF 地表复用的权威实现规格见 [`docs/RTF_CORE_REUSE_RESEARCH.md`](docs/RTF_CORE_REUSE_RESEARCH.md)。`R0/R1/R2` 已完成 golden parity、显式 `RTF_MULTI` runtime、末地分带与有限 shelf 的代码闭环；但当前 `EndTerrainComposer` 仍主要是“单一选择噪声 + 通用 Perlin 层”，没有 terrain region、成熟地貌族和有限 ridge/compact feature，因此当前视觉质量只能视为原型。
 - 2026-07-18 路线校正：RTF 最新地形区架构已经用预览和实机证据否决“RIDGE 拥有完整宏观区域”的 S4.2 语义。P4 的首个生产契约由正权重 `AREA` 地貌组成统一、无空洞的 terrain ownership 分区；`RIDGE` 使用独立、有界 anchor overlay，不能夺取宏观 owner。RTF 最新火山线已有较成熟候选，但 ETF 当前仍因阶段范围和末地语义冻结 `COMPACT`，不将其纳入本轮 ownership。完整结论见 [`docs/reviews/RTF_TERRAIN_REGION_ARCHITECTURE_REVIEW_2026-07-18.md`](docs/reviews/RTF_TERRAIN_REGION_ARCHITECTURE_REVIEW_2026-07-18.md)。
 - P4.6 精确 jar 的新世界和 ETF/RTF/C2ME 客户端验收已闭环。当前最高优先级是 P4.7-0：先为
-  `REGION_PLANNED + archipelago` 建立可重复的缓存、allocation、cold/warm、chunk traversal 和 JFR
-  基线，再比较 local analytical、RTF-derived hydraulic、2024 analytical/multigrid 与
-  Priority-Flood/flow/stream-power 候选。当前 legacy terrain 只作为迁移与性能基线，不继续投入大段
-  视觉修补。
+  `REGION_PLANNED + archipelago` 建立可重复的缓存、allocation、cold/warm、chunk traversal 和四组合 JFR
+  基线，再比较 local analytical + thermal、RTF-derived hydraulic primitive tile 与
+  bounded Priority-Flood/flow/stream-power 候选。2024 analytical/multigrid 暂为研究储备；当前 legacy
+  terrain 只作为迁移与性能基线，不继续投入大段视觉修补。
 - 原版主岛、黑曜石柱、龙战、返回门、网关及外围区域当前冻结，不属于近期修改范围。
 - 内容扩展路线已从 biome-only 升级为 ETF Worldgen Content Pack API；当前仅有规格，没有 loader/runtime。
 - 地下继续使用 ETF 自研路线，不采用 RTF cave；P4 高质量地表完成前不新增洞穴功能。
@@ -358,66 +358,57 @@ surface、structure 与后续 Content Pack 只能消费这些正式信号，禁�
 - [ ] 当前 `format_version=3` 仍拒绝持久化 `REGION_PLANNED`，群岛尚未开放为玩家 preset 或编辑器选项；
   `format_version=4`、玩家配置开放和 P4.9 的完整 JFR/发布矩阵仍待后续切片。
 
-#### P4.7：R9 侵蚀与排水
+#### P4.7：R9 表面侵蚀与排水诊断
 
 - [x] 已完成 [`docs/P4_7_EROSION_ALGORITHM_RESEARCH.md`](docs/P4_7_EROSION_ALGORITHM_RESEARCH.md)：
-  不把 local analytical 与 RTF droplet 当作二选一；统一比较 local analytical baseline、RTF-derived
-  hydraulic primitive tile、2024 analytical/multigrid、Priority-Flood + D8/D-infinity + stream-power
-  和 bounded thermal 收尾。论文、仓库、许可证、C2ME 边界和性能架构已记录。
+  冻结“效果与性能对等”的候选评选规则，保留 local analytical + bounded thermal、RTF-derived
+  hydraulic primitive tile 和 bounded Priority-Flood/flow/stream-power 三条主候选；2024
+  analytical/multigrid 降为前三条均失败时才恢复的研究储备。
 - [x] 2026-07-23 只读对齐 RTF R10X 3D river 总报告、论文评审、工程 feasibility proof、现行规范、
   WP01-WP08 与导入前快照：确认中心 uplift 是 terrain/water/profile authority 混用，不是 ETF 应继续
-  优化的地貌层。P4.7 只保留 surface erosion/drainage potential；完整 receiver graph、shared profile、
-  湖泊、水面和 hydrology artifact 生命周期留给后续独立 3D 河流阶段。
-- [x] [`docs/P4_7_ANALYTICAL_EROSION_SPEC.md`](docs/P4_7_ANALYTICAL_EROSION_SPEC.md) 现在冻结的是低成本
-  baseline 契约，不代表正式算法已选定；不新增 preset/UI 字段，不改义旧 droplet `ErosionConfig`，
-  不建立私有 worldgen executor。
-- [x] 2026-07-23 完成 P4.7a 的导数量纲前置修正：`EndHeightmap.sampleTerrainProfile` 在求 slope/curvature
+  优化的地貌层。P4.7 只保留 surface erosion、dry drainage potential 和有界 incision；完整 receiver
+  graph、shared profile、湖泊、水面和 hydrology artifact 生命周期由
+  [`docs/P5_3D_HYDROLOGY_ARCHITECTURE_PLAN.md`](docs/P5_3D_HYDROLOGY_ARCHITECTURE_PLAN.md) 管理。
+- [x] [`docs/P4_7_ANALYTICAL_EROSION_SPEC.md`](docs/P4_7_ANALYTICAL_EROSION_SPEC.md) 冻结 baseline 契约：
+  不新增 preset/UI 字段，不改义旧 droplet `ErosionConfig`，不建立私有 worldgen executor。其
+  `EndAnalyticalErosionRuntime` 目前是 test-only candidate，不是 production runtime。
+- [x] 2026-07-23 完成 profile 导数量纲修正：`EndHeightmap.sampleTerrainProfile` 在求 slope/curvature
   前将归一化 raw top 乘回 `EndLevels.worldHeight`，并用 Standard/1024 高世界 synthetic plane/paraboloid
-  尺度不变量测试锁定契约；local analytical runtime、正式 top 接线和 benchmark 仍未完成。
-- [x] 2026-07-23 建立第一块 P4.7-0 smoke-profile 观测：固定 seed `123456789`、`(8192,8192)` 的 16 x 16
+  尺度不变量测试锁定契约。
+- [x] 2026-07-23 建立 P4.7-0 smoke-profile 观测：固定 seed `123456789`、`(8192,8192)` 的 16 x 16
   profile traversal，ordered/shuffled checksum 相同；单次本机观察为 60,385.9 与 32,033.3 ns/profile。
-  结果已记录在 [`docs/reviews/P4_7_BASELINE_2026-07-23.md`](docs/reviews/P4_7_BASELINE_2026-07-23.md)，不作为性能门禁。
-- [x] 2026-07-23 为 `EndDensity.ColumnCache` 增加仅测试/dev 启用的 per-worker 指标，并在同一窗口的 5 Y
-  full-column traversal 观察到 1,280 request、1,024 hit、256 miss、82 collision/eviction 与 256 full-column
-  refresh；ordered/shuffled density checksum 相同。该诊断不使用 atomic，不改变默认缓存策略或正式 density 输出。
-- [x] 2026-07-23 完成 P4.7-0 的 cold/warm 延迟观测切片：24 次 16 x 16 full-column traversal 在同一
-  `:common:test` 运行中记录 cold p50/p95 `2.115/3.872 ms`、warm p50/p95 `1.452/3.161 ms`；冷/热
-  owner 的 density checksum 相同。该测试只建立可重复观测，不设置硬件相关阈值。
-- [x] 2026-07-23 建立候选算法共用的 test-only primitive fixture：固定 33 x 33、2-cell halo、4-block
-  sample distance 与 Standard 512 导数量纲，覆盖 flat、plane、paraboloid、isolated spike、ridge、
-  plateau edge、closed basin、watershed、coast/thin shelf 和 archipelago window。所有候选必须消费同一
-  raw top、landness/inlandness、available thickness 和 archipelago gate，并通过访问顺序无关 checksum。
-- [ ] P4.7-0 仍未闭环：还需补 raw-top evaluation、allocated bytes、tile peak bytes，以及 ETF/RTF/C2ME
-  四组合服务器/客户端 JFR。当前 5k/50k JUnit 平均 `ns/op` 与本轮 p50/p95 都只能作观测，不能单独
-  充当性能门禁。
-- [x] 2026-07-23 完成 P4.7a local analytical baseline 候选：immutable `EndAnalyticalErosionRuntime` 与
-  caller-owned `EndAnalyticalErosionBuffer` 实现坡度/曲率、ridge protection、valley drainage diagnosis、
-  roughness/resistance、landness/inlandness、outer activation 和 thickness 门控；输出只减不增且不伪造
-  sediment。canonical fixture 的完整 common 测试观测为 `39.1 ns/sample`；它只进入统一 fixture 与测试，
-  不接正式 `EndDensity`，也不新增 preset/UI 字段。
-- [ ] P4.7b：使用同一 caller-owned primitive input artifact 进行候选 bake-off：RTF droplet 改写为
-  primitive SoA/canonical tile；2024 stream-power analytical 使用 multigrid tile 原型；Priority-Flood +
-  D8/D-infinity + stream-power 验证 drainage/incision；bounded thermal 只作统一可选收尾。
-- [ ] P4.7c：选择同时满足视觉、volume、首块延迟、内存、边界、访问顺序、C2ME 和 JFR 门禁的最小
-  组合后，才对受控 `REGION_PLANNED` 接入 `EndDensity` 列缓存或 final immutable tile cache。legacy、
-  中央保护、void、海岸、薄 shelf 和 archipelago-dominant 列保持零影响。
-- [ ] P4.7d：REGION_PLANNED preview 消费获选的同一 runtime；旧 `PreviewErosionGrid` 只保留为
-  v3 droplet 参数兼容预览，不进入正式 density。
-- [ ] 固定后处理顺序：raw top -> erosion -> smoothing -> slope/curvature/void-edge metrics
-  -> continuity correction -> volume；各阶段使用 primitive buffer 并可独立关闭验证。
-- [ ] `raw top` 必须先汇总 AREA、RIDGE 和 archipelago 的最终 relief；COMPACT 火山仍冻结；
-  侵蚀不重新选择地貌、不改变 ownership，也不得用后处理补救错误的大陆拓扑。
-- [ ] smoothing 只修正局部尖峰，不得抹平 ridge、crater、plateau edge 或海岸层级。
-- [ ] RTF river geometry 只改造成干谷、裂谷或悬空排水槽候选，不搬主世界 water table/`RiverCache`。
-- [ ] 所有 tile 候选使用 canonical world-space key、由 stencil/lifetime/drainage context 推导的 fixed halo、
-  worker-owned primitive buffer 和有界 owner-aware cache；禁止用访问顺序产生 source 或创建私有 executor。
-- [ ] 固定 seed、缓存碰撞/淘汰、不同区块访问顺序和 C2ME 多 worker 结果逐位一致；任一 tile 候选都要
-  额外证明相邻 tile border 逐位一致，不能只要求 hydraulic 通过。
+  结果记录在 [`docs/reviews/P4_7_BASELINE_2026-07-23.md`](docs/reviews/P4_7_BASELINE_2026-07-23.md)，不作为性能门禁。
+- [x] 2026-07-23 为 `EndDensity.ColumnCache` 增加仅测试/dev 启用的 per-worker 指标，观察到 1,280 request、
+  1,024 hit、256 miss、82 collision/eviction 与 256 full-column refresh；ordered/shuffled density checksum 相同。
+- [x] 2026-07-23 完成 cold/warm 延迟观测切片：24 次 16 x 16 full-column traversal 记录 cold p50/p95
+  `2.115/3.872 ms`、warm p50/p95 `1.452/3.161 ms`；该测试只建立可重复观测，不设置硬件相关阈值。
+- [x] 2026-07-23 建立候选算法共用的 test-only primitive fixture：固定 33 x 33、2-cell halo、4-block sample
+  distance 与 Standard 512 导数量纲，覆盖 flat、plane、paraboloid、isolated spike、ridge、plateau edge、
+  closed basin、watershed、coast/thin shelf 和 archipelago window；候选必须消费同一 input artifact。
+- [ ] **P4.7-0 close**：补 raw-top evaluation、allocated bytes、tile peak bytes、cache duplicate builds，以及
+  ETF、ETF+C2ME、ETF+RTF、ETF+RTF+C2ME 四组合服务器/客户端 JFR。没有这些证据，不得宣布任何候选胜出。
+- [x] 2026-07-23 完成 local analytical baseline：immutable `EndAnalyticalErosionRuntime` 与 caller-owned
+  `EndAnalyticalErosionBuffer` 实现 slope/curvature、ridge protection、valley diagnosis、roughness/resistance、
+  landness/inlandness、outer activation 和 thickness 门控；canonical fixture 观测 `39.1 ns/sample`，仅为
+  primitive 成本，不代表列缓存、NoiseChunk、C2ME 或客户端性能。
+- [ ] **P4.7b candidate bake-off**：先实现 bounded thermal 对照；再以同一 primitive input artifact 比较
+  RTF droplet 的 primitive SoA/canonical tile 与 Priority-Flood + adaptive flow + stream-power 的有界地表版本。
+  2024 multigrid 保持研究储备。
+- [ ] **P4.7c selection**：以视觉质量、volume safety、首块 p95、内存、分块边界、访问顺序、C2ME 和 JFR
+  为同等硬门禁，选择最小组合；未同时通过不得接入正式 `EndDensity`。
+- [ ] **P4.7d production integration**：获选组合只对受控 `REGION_PLANNED` 接入列缓存或 final immutable tile
+  cache；legacy、中央保护、void、海岸、薄 shelf 和 archipelago-dominant 列保持逐位零影响。
+- [ ] 固定后处理顺序：raw top -> erosion/incision -> smoothing -> final metrics -> continuity correction
+  -> volume；raw top 必须先汇总 AREA、RIDGE 和 archipelago，侵蚀不得改变 ownership 或修复错误拓扑。
+- [ ] smoothing 只修正局部尖峰，不抹平 ridge、plateau edge 或海岸层级；RTF river geometry 只作为干谷、裂谷
+  或悬空排水槽候选，不搬主世界 water table/`RiverCache`。
+- [ ] 所有 tile 使用 canonical world-space key、fixed halo、worker-owned primitive buffer 和有界 owner-aware
+  cache；固定 seed、缓存碰撞/淘汰、区块访问顺序和 C2ME 多 worker 必须逐位一致，并证明相邻 tile border 连续。
 
-#### P4.8：R10 preview 与编辑器
+#### P4.8：R10 production preview 与 v4 parity
 
 - [ ] 新增 continent edge/landness/inlandness、terrain region/family、eligibility、
-  ridge/compact feature、archipelago、slope、sediment 和 erosion 调试层。
+  ridge/compact feature、archipelago、slope、drainage potential 和 erosion 调试层；不伪造 sediment 或 water profile。
 - [ ] 2D、高度着色和 X/Z 剖面消费同一 runtime primitive。
 - [ ] 实现共享 `PreviewGenerationScheduler`：immutable snapshot、generation id、低清/高清
   重采样、最后成功帧、有界队列、关闭取消和渲染线程 texture upload。
@@ -425,71 +416,78 @@ surface、structure 与后续 Content Pack 只能消费这些正式信号，禁�
   不与 Minecraft/C2ME 争用整机逻辑处理器。
 - [ ] 参数按大陆、区域规划、地貌族和结构化特征拆分子编辑器；不复制 RTF UI。
 - [ ] 拖动低清、松手高清、过期任务取消和低配关闭高成本预览继续有效。
+- [ ] preview 必须消费获选 production runtime；旧 `PreviewErosionGrid` 只保留 v3 droplet 兼容预览。
 
-#### P4.9：R11 性能、兼容与默认候选
+#### P4.9：R11 性能、兼容与 v4 发布候选
 
 - [ ] 分别记录 legacy、`RTF_MULTI`、`RTF_ADVANCED` 和完整 region-planned 组合的 JFR。
 - [ ] 高世界不使用预测 surface 或固定 margin 截短 `NoiseChunk`；只有最终 density cell 能严格证明空且流体安全时才评估 material fast path。
 - [ ] 记录 noise generation p50/p95、allocation/chunk、MSPT、GC、客户端 mesh/render 与首次资源加载。
 - [ ] ETF + RTF、ETF + C2ME、ETF + RTF + C2ME 固定版本矩阵通过。
-- [ ] 只有视觉、性能、确定性和兼容门禁同时通过，才讨论新世界默认切换。
+- [ ] 只有视觉、性能、确定性、volume 和兼容门禁同时通过，才讨论 `format_version=4` 玩家 preset、编辑器和默认切换。
 - [ ] 旧 v3 preset 始终保持原大陆算法、volume 和 `LEGACY_SELECTOR`，不随 jar 更新静默重塑。
 - [ ] 正式 worldgen 不创建 ETF 私有 executor；辅助 preview/tile worker 同时受 CPU、heap
   与有界队列限制。
 
-验收：主岛外能看到多个自然大陆与虚空海峡；大陆内部由可辨识的 AREA 地貌区域和有限山系组织，群岛与海岸有层级，侵蚀不会破坏 volume；Standard、RTF、C2ME 和客户端门禁全部通过。火山不属于本阶段验收。
+验收：主岛外能看到多个自然大陆与虚空海峡；大陆内部由可辨识的 AREA 地貌区域和有限山系组织，群岛与海岸有层级，
+侵蚀不会破坏 volume；Standard、RTF、C2ME、客户端和 JFR 门禁全部通过后才形成 v4 发布候选。火山和真实水体不属于本阶段验收。
 
-### P5：ETF Worldgen Content Pack API v1
+### P5：0.2.x 3D hydrology artifact 与地表水文
 
-权威规格：[`docs/CONTENT_PACK_SPEC.md`](docs/CONTENT_PACK_SPEC.md)。
+权威规格：[`docs/P5_3D_HYDROLOGY_ARCHITECTURE_PLAN.md`](docs/P5_3D_HYDROLOGY_ARCHITECTURE_PLAN.md)。
+
+- [ ] P5.0：在项目 JDK 21 上 replay RTF R10X feasibility proof 的纯数学契约，记录与 Minecraft 实际 bounds、
+  finite shelf、ocean halo 和 C2ME 约束的差异；RTF 仓库保持只读。
+- [ ] P5.1：建立 region-aligned bounded domain、ocean/void/protected/terminal halo 和 canonical input artifact；
+  邻域、终点和未解析 domain 必须明确，不能回退为中心径向流。
+- [ ] P5.2：实现 depression hierarchy/Priority-Flood、provisional adaptive MFD 和 deterministic single-receiver
+  DAG；证明无环、terminal reachability、tie-break 和访问顺序无关。
+- [ ] P5.3：以物理采样面积做 accumulation，构造 shared node/reach identity、confluence 和跨 domain border 契约。
+- [ ] P5.4：按 feasible interval + outlet-first 生成唯一 bed/water profile；pool、step、cascade、lake 和 confluence
+  不得被 surface/gasket 各自重算。
+- [ ] P5.5：从共享 profile 生成有界 corridor、bank、lake footprint 和真实水体；先更新 final top/volume，再发布
+  immutable primitive artifact，保持中央原版保护和 v4 hydrology-disabled 语义。
+- [ ] P5.6：preview、Content Pack context、Standard/RTF/C2ME/JFR、长时间新区块和重载门禁全部通过后，才开放 v5 preset。
+
+验收：无中心抬升、径向主河或全局 water table；同一 artifact 驱动河床、水面、湖泊、preview 和下游内容；跨 domain、
+访问顺序、worker 数和 C2ME 结果逐位一致，且 Standard MSPT/内存/首 domain p95 达标。
+
+### P6：0.3 ETF Worldgen Content Pack API v1
+
+权威规格：[`docs/CONTENT_PACK_SPEC.md`](docs/CONTENT_PACK_SPEC.md)。hydrology-facing 字段只能来自已验收的 P5 artifact。
 
 - [ ] 冻结 Content Pack、Content Profile、fallback 和 dependency schema。
 - [ ] 实现资源扫描、schema 校验、registry key/tag 解析和诊断汇总。
-- [ ] 建立 immutable 3D selector，消费 x/y/z、climate、surface depth、terrain tags 和 surface kind。
-- [ ] 新增稳定 `ClimateRegionPlan`，输出 region id/center/edge、temperature、moisture 和
-  macro variant；高地/火山可使用 terrain anchor 采样同一气候场。
-- [ ] profile/terrain/palette 使用稳定 resource key；加载期编译为数组索引和 bitset，
-  不把列表下标当作持久化身份。
+- [ ] 建立 immutable 3D selector，消费 x/y/z、climate、surface depth、terrain tags、surface kind 和稳定 hydrology context。
+- [ ] 新增稳定 `ClimateRegionPlan`，输出 region id/center/edge、temperature、moisture 和 macro variant。
+- [ ] profile/terrain/palette/hydrology 使用稳定 resource key；加载期编译为数组索引和 bitset，不把列表下标当作持久化身份。
 - [ ] biome/profile 不兼容时使用固定数量、固定顺序的有界 climate nudge；禁止无界候选缓存。
-- [ ] 内置 `endterraforged:vanilla` fallback。
-- [ ] 实现 profile 到 registered biome 的映射；多个 profile 可复用同一 biome holder。
-- [ ] 实现 top、underside、cave floor、cave ceiling 和 void edge palette 条件。
-- [ ] 冻结 `SurfaceContext`：ownership/visible family、terrain tags、feature influence、
-  slope、curvature、erosion、sediment、drainage、landness/inlandness 和 climate。
-- [ ] 实现 placed feature 引用与 profile placement filter。
-- [ ] 提供 terrain region center、ridge crest/endpoint、volcano crater/flank、
-  plateau interior/edge、coast/void edge 的版本化 placement anchors。
-- [ ] runtime 完成后接 2D/剖面调试叠加，再接编辑器 pack 摘要。
+- [ ] 内置 `endterraforged:vanilla` fallback，实现 profile 到 registered biome 的映射和 top/underside/cave/void edge palette 条件。
+- [ ] 冻结 `SurfaceContext`：ownership/visible family、terrain tags、feature influence、slope、curvature、erosion、
+  sediment、drainage、bed/water profile、reach/lake flags、landness/inlandness 和 climate。
+- [ ] 实现 placed feature 引用、profile placement filter 和版本化 terrain/ridge/plateau/coast/void-edge anchors。
 - [ ] 验证资源重载、缺失依赖、fallback 环、确定性和 C2ME 并发读取。
 
 验收：纯数据包可以定义基础 Content Profile；缺失第三方资源时世界仍加载且回退明确；热路径不解析 JSON/YAML 或查询磁盘。
 
-### P6：兼容原型与世界规格
+### P7：0.4 自研宏大地下系统
 
-- [ ] 先完成一个只引用已注册 biome/feature 的主流末地模组兼容包原型。
-- [ ] 按 [`docs/TERRA_CONTENT_COMPATIBILITY_RESEARCH.md`](docs/TERRA_CONTENT_COMPATIBILITY_RESEARCH.md) 制作 ReimagEND 类主岛外内容适配原型。
-- [ ] ReimagEND 原型不接 Terra density、dragon island、dragon pit 或中央 buffer。
-- [ ] 不在 ETF core 中复制 GPL 配置、结构或资源。
-- [>] 创建世界已能把自定义 bounds 同步应用到 End `dimension_type + noise_settings`；后续仍需把 world spec 从普通 terrain preset 字段中独立出来，并增加命名规格快捷选择。
+- [ ] 按巨型洞厅、深渊洞口、长距离网络、多层洞穴、地下河、桥梁/石柱的顺序收束；地下河扩展 P5 的 shared reach/profile authority。
+- [ ] 每一层严格按 runtime -> preview -> UI 接入，正式液体和结构挂点不得复用 preview-only mask。
+- [ ] 对 Standard/Extended 做性能、边界、种子稳定性、视觉和 C2ME 并行测试；不得创建第二套地下 water table。
+
+### P8：兼容原型、世界规格与发布整合
+
+- [ ] 先完成一个只引用已注册 biome/feature 的主流末地模组兼容包原型，并按 [`docs/TERRA_CONTENT_COMPATIBILITY_RESEARCH.md`](docs/TERRA_CONTENT_COMPATIBILITY_RESEARCH.md) 制作 ReimagEND 类主岛外内容适配原型。
+- [ ] ReimagEND 原型不接 Terra density、dragon island、dragon pit 或中央 buffer；不在 ETF core 中复制 GPL 配置、结构或资源。
+- [>] 创建世界已能把自定义 bounds 同步应用到 End `dimension_type + noise_settings`；后续仍需把 world spec 从 terrain preset 字段中独立出来，并增加命名规格快捷选择。
 - [>] Standard 保持默认；合法自定义范围已经可用，Extended/Grand/Epic 的命名按钮、性能预算和产品化验收仍未完成。
 - [x] 总高度 1024 及以上显示黄色性能警告；已有世界从实际 `ServerLevel` 只读显示并禁止伪扩容。
-
-### P7：自研宏大地下系统
-
-- [ ] 按巨型洞厅、深渊洞口、地下河、长距离网络、多层洞穴、桥梁/石柱的顺序收束。
-- [ ] 每一层严格按 runtime -> preview -> UI 接入。
-- [ ] 正式液体和结构挂点必须有独立 runtime，不得复用 preview-only mask 充数。
-- [ ] 对 Standard/Extended 做性能、边界、种子稳定性和视觉测试。
-- [ ] 与 C2ME 并行生成做专门验证。
-
-### P8：发布、整合包与兼容矩阵
-
-- [ ] 完成 Preset Library 真实客户端清单。
-- [ ] 建立 C2ME、BetterEnd、Nullscape、结构模组、资源包/光影和用户整合包版本矩阵。
+- [ ] 完成 Preset Library 真实客户端清单，建立 C2ME、BetterEnd、Nullscape、结构模组、资源包/光影和用户整合包版本矩阵。
 - [ ] 完成长时间新区块生成、重载、存档回归和缺失兼容包测试。
-- [ ] 按 [`docs/reviews/WORKTREE_INTEGRATION_REVIEW_2026-07-13.md`](docs/reviews/WORKTREE_INTEGRATION_REVIEW_2026-07-13.md) 收束当前工作树：审查 221 个未跟踪文件的归属，确保 36 个未跟踪 common 发布关键源码和 3 个 NeoForge 客户端关键源码进入可复现的版本历史，并处理 tracked-but-ignored 的旧崩溃文件状态。
+- [ ] 按 [`docs/reviews/WORKTREE_INTEGRATION_REVIEW_2026-07-13.md`](docs/reviews/WORKTREE_INTEGRATION_REVIEW_2026-07-13.md) 收束当前工作树，审查未跟踪文件归属并处理 tracked-but-ignored 的旧崩溃文件状态。
 - [x] 当前源码快照已顺序通过 common、NeoForge、Fabric 和 release artifact 门禁。
-- [ ] 收束未跟踪/已跟踪忽略文件后通过严格仓库卫生门禁；当前报告仍有 221 个未跟踪发布相关文件和 1 个 tracked-but-ignored 旧崩溃文件。
+- [ ] 收束未跟踪/已跟踪忽略文件后通过严格仓库卫生门禁。
 - [ ] GitHub 预发布后进入用户整合包抢先测试，再发布 Modrinth/CurseForge。
 
 ### P9：原版主岛与外围区域（最后阶段）

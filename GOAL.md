@@ -1,7 +1,7 @@
 # EndTerraForged 长期目标与阶段目标
 
 > 文档状态：当前有效，目标模式唯一入口。
-> 最近更新：2026-07-23。
+> 最近更新：2026-07-25。
 > 权威范围：产品目标、阶段顺序、完成定义和执行门禁。
 > 当前任务与短期顺序以 [`PLAN.md`](PLAN.md) 为准；工程规则以 [`AGENTS.md`](AGENTS.md) 为准。
 
@@ -41,6 +41,10 @@
   地貌资格、filter pipeline、climate region、surface signal 和 preview 任务生命周期可以
   作为模块化来源；compact/volcano 只保留为未成熟的设计参考。ETF 必须改造成 immutable
   runtime、caller-owned primitive buffer、稳定 resource key 与有界调度。
+- RTF R10X 3D river 研究只作为 ETF hydrology 的契约和验证来源：可吸收 bounded domain、
+  depression/receiver graph、physical-area accumulation、shared profile 和 immutable artifact
+  设计；不得迁移中心 uplift、径向主河、`waterTable` 复用、surface/gasket 重算水位或任何未通过
+  ETF JDK 21、Minecraft runtime、跨 domain、C2ME 和 JFR 门禁的 proof 代码。
 - 正式 worldgen 不复制 RTF 的私有 executor。Minecraft/C2ME 负责区块并行；ETF 只可为
   preview 和可选离线 tile 后处理使用受控、低优先级、有界辅助线程。
 - 不移植 RTF UI、主世界水位、海洋、biome registry 绑定、可变/池化 `Cell`、`GeneratorContext`、`RiverCache` 或独占 `NoiseRouter.mapAll` 的注入方式。
@@ -73,6 +77,8 @@
 - 阶段 B 的高质量 `REGION_PLANNED` 路线在配置闭环完成后使用新的
   `format_version=4`。现有 v3 世界永久保留原大陆算法、volume 与
   `LEGACY_SELECTOR`，不得随 jar 更新静默改变未生成区块。
+- 阶段 C 的真实地表水文使用新的 `format_version=5`。v4 只包含已验收的宏观地表、表面侵蚀和
+  排水诊断，不因 jar 更新静默获得河流、水面或湖泊；缺失 hydrology 配置时保持水文关闭。
 - 原版主岛、末影龙、黑曜石柱、返回门、折跃门及外围区域当前冻结为原版行为，现阶段不得修改或重塑。实现上这不是一句 UI 或文档约定：中央保护区的正式 density 必须委托给原版 fallback density；ETF 宏观大陆只可在保护区外开始采样。
 - 保护区外不能以固定半径硬切出实体墙或悬空平面。大陆拓扑必须保留一个由确定性 landness 控制的外部过渡带，使原版中央流程、中央缓冲虚空和 ETF 外部大陆彼此隔离。
 - 主岛整合属于最后阶段；可选 ETF 主岛重做是扩展目标，不得阻塞首个公开版本。
@@ -209,74 +215,81 @@ C2ME 兼容的最低要求：没有依赖线程顺序的随机数，没有跨 wo
 
 洞穴可以实验性进入 0.2，但不得阻塞地表版本，也不得把预览骨架宣传成正式完整洞穴。
 
-### 阶段 C：0.2.x ETF Worldgen Content Pack API
+### 阶段 C：0.2.x 真实 3D 水文与地表河流
 
-目标：让地形几何与 biome、palette、feature 和内容主题解耦，并为整合包兼容提供稳定入口。
+目标：在 v4 宏观地表验收后，交付独立的 `format_version=5` hydrology artifact、河谷、湖泊和真实水体。
+
+完成定义：
+
+- 从已验收的 final macro terrain、finite volume 和 ocean halo 建立有界 hydrology domain。
+- 完成 depression hierarchy、明确 terminal、provisional MFD、deterministic single-receiver DAG、
+  physical-area accumulation 和 shared node/reach graph。
+- 用 outlet-first feasible-interval profile 唯一决定 bed/water profile、pool、step、cascade 和 confluence。
+- 河谷、湖泊、surface water placement 和 preview 只读取同一个 immutable primitive artifact。
+- 跨 domain/区块边界、不同访问顺序、不同 worker 数和 C2ME 结果逐位一致；无中心抬升、径向主河或独立 water table。
+- Standard、ETF/RTF、ETF/C2ME、ETF/RTF/C2ME 的客户端、MSPT、JFR、长时间生成和重载门禁通过。
+- v4 世界保持 hydrology-disabled；v5 配置具备完整 Codec、Validator、Builder、runtime、preview 和迁移策略。
+
+### 阶段 D：0.3 ETF Worldgen Content Pack API
+
+目标：在地形和水文 authority 稳定后，让几何、biome、palette、feature 和内容主题解耦。
 
 完成定义：
 
 - 定义并冻结 v1 资源格式、schema 校验、选择规则和 fallback 语义。
 - 内置原版 fallback 包，缺失第三方 biome/profile/feature 时世界仍可加载并给出诊断。
-- 3D profile 选择可读取 x/y/z、地形区、气候、当地深度、surface kind 和地貌标签，不改变 density 主链。
-- profile、terrain 与 palette 使用稳定 resource key；资源加载期编译为数组索引和 bitset，
+- 3D profile 选择可读取 x/y/z、地形区、气候、当地深度、surface kind、地貌标签和稳定 hydrology 字段，
+  不改变 density 主链。
+- profile、terrain、palette 与 hydrology context 使用稳定 resource key；资源加载期编译为数组索引和 bitset，
   运行时不解析 JSON、查磁盘或依赖列表位置。
-- 数据包可添加 biome 映射、Content Profile 和基础 palette；无 Java 代码也能制作基础内容包。
-- top、underside、cave floor、cave ceiling 和 void edge 具备稳定放置语义。
-- `SurfaceContext` 至少暴露 ownership/visible family、terrain tags、structured feature
-  influence、slope、curvature、erosion、sediment、drainage、landness/inlandness 和气候。
-- 结构挂点至少支持 terrain region center、ridge crest/endpoint、volcano crater/flank、
-  plateau interior/edge、coast/void edge，并为后续 cave graph anchors 留出版本化能力。
-- 资源重载、注册表解析、服务端同步和确定性选择有测试。
-- 至少完成一个注册表型末地模组兼容包和一个 ReimagEND 类主岛外内容适配原型。
+- `SurfaceContext` 的 drainage、sediment、bed/water profile、reach/lake flags 只来自生产 artifact。
+- 资源重载、注册表解析、服务端同步和确定性选择有测试，并完成至少一个注册表型末地模组兼容包原型。
 
-### 阶段 D：0.3 正式宏大地下系统
+### 阶段 E：0.4 正式宏大地下系统
 
-目标：交付可探索、可导航、可配置的地下主体验。
+目标：让地下洞厅、深渊、洞穴网络和地下河复用统一 region/hydrology authority。
 
 完成定义：
 
 - region graph 在区块边界连续，顺序无关且 deterministic。
-- 巨型洞厅、深渊洞口、长距离网络、多层洞穴均进入正式 density carve。
-- 地下河生成真实水体，深层少量熔岩具有清晰规则与安全边界。
-- 天然桥梁和石柱由保留体积或后处理稳定生成。
-- 2D 叠加与 X/Z 剖面使用同一 runtime 数学路径。
-- 对 Standard 和 Extended 做性能、边界、种子稳定性与视觉冒烟。
-- 配置默认保守，不破坏已有世界默认输出。
+- 巨型洞厅、深渊洞口、长距离网络、多层洞穴进入正式 density carve。
+- 地下河扩展同一个 receiver/reach/profile authority，真实水体与深层少量熔岩具有清晰规则和安全边界。
+- 天然桥梁和石柱由保留体积或后处理稳定生成；不得创建第二套地下 water table。
+- 2D 叠加与 X/Z 剖面使用同一 runtime 数学路径；Standard/Extended 性能、边界和视觉门禁通过。
 
-### 阶段 E：0.4 兼容、超大规格与整合包验证
+### 阶段 F：0.5 兼容、超大规格与整合包验证
 
 目标：在真实超大型整合包中稳定运行，并扩展高级世界规格。
 
 完成定义：
 
 - BetterEnd、Nullscape、ReimagEND 类内容适配、主流结构模组与 C2ME 等形成版本化兼容矩阵。
-- ETF 接管冲突、适配器启用和降级状态有明确日志。
-- 用户实际整合包完成长时间新区块生成、重载和存档回归。
+- ETF 接管冲突、适配器启用和降级状态有明确日志；用户整合包完成长时间新区块生成、重载和存档回归。
 - Extended/Grand 达到明确性能预算；Epic 标记实验性并有硬警告。
 - 本阶段仍不修改原版主岛；主岛整合继续后置。
 
-### 阶段 F：0.5 至 1.0 完整体验与正式发布
+### 阶段 G：0.6 至 1.0 完整体验与正式发布
 
 目标：完成高级预览、生态扩展和稳定发布契约。
 
 完成定义：
 
-- 可旋转 3D 网格预览、剖切和洞穴层可视化可用，且不阻塞低配设备使用 2D 模式。
+- 可旋转 3D 网格预览、剖切和洞穴/水文层可视化可用，且不阻塞低配设备使用 2D 模式。
 - 地下生态、装饰、结构挂点和官方 Content Pack 按 runtime -> preview -> UI 顺序接入。
-- preset 与 Content Pack 格式具备版本迁移策略。
-- GitHub 预发布、用户整合包抢先测试、反馈修复、Modrinth/CurseForge 发布流程可重复执行。
+- preset、hydrology 和 Content Pack 格式具备版本迁移策略；GitHub 预发布、整合包抢先测试、反馈修复、
+  Modrinth/CurseForge 发布流程可重复执行。
 - 资源、metadata、语言文件、datapack、关键类、许可证和兼容矩阵全部通过发布门禁。
 
-### 阶段 G：原版主岛与外围区域（最后阶段）
+### 阶段 H：原版主岛与外围区域（最后阶段）
 
-目标：在外部大陆、性能、Content Pack、地下和发布链稳定后，单独验证原版中央流程。
+目标：在外部大陆、水文、性能、Content Pack、地下和发布链稳定后，单独验证原版中央流程。
 
 完成定义：
 
 - 默认继续保持原版主岛、黑曜石柱、龙战、返回门和网关行为。
 - 先建立独立 seed、结构和龙战流程回归，再评审任何最小整合改动。
 - 可选 ETF 主岛重做默认关闭，不得影响原版兼容路径。
-- 主岛工作不得倒逼外部大陆、Content Pack 或兼容层反向依赖中央实现。
+- 主岛工作不得倒逼外部大陆、hydrology、Content Pack 或兼容层反向依赖中央实现。
 
 ## 五、目标模式执行规则
 
@@ -303,7 +316,12 @@ C2ME 兼容的最低要求：没有依赖线程顺序的随机数，没有跨 wo
 
 - 当前版本：`0.1.7` 开发工作树。
 - 当前阶段：阶段 B 的 P2 外部大陆与 P3 有限大陆架已形成代码闭环，但当前地表仍只是原型。`EndTerrainComposer` 主要依赖一个低频选择噪声在若干通用层之间切换，缺少区域级地貌规划、成熟地貌族和有限形状特征，因此不能把现有截图质量视为可继续微调的最终架构。
-- 当前执行顺序：先完成最新 jar 的中央保护、底面、直壁、岩浆、RTF/C2ME 同载短回归；地表重建随后按“AREA 地貌族与资格策略 -> 曲线/多段山系 -> 附属群岛与海岸 -> analytical erosion/排水 -> 预览调度和编辑器 -> 性能兼容”的顺序推进。火山不再是 0.2.0 首个垂直切片的前置条件；只有完成独立地质设计、固定 seed 视觉验收和性能预算后才单列进入后续版本。每一层先完成正式 runtime，再接预览，最后才开放玩家 UI。
+- 当前执行顺序：P4.6 客户端验收已闭环；现在先完成 P4.7-0 allocation/JFR 基线，再按统一 fixture
+  比较 local analytical + thermal、RTF-derived primitive hydraulic tile 和 bounded
+  Priority-Flood/flow/stream-power。获选组合接入 final top、volume 和同源 preview 后，必须先通过
+  Standard、RTF/C2ME 与客户端性能门禁，最后才开放 `format_version=4` 和玩家 UI。完整 3D 水文不
+  塞进 P4.7，而是在 v4 地表验收后以 `format_version=5` 独立推进；Content Pack API 在稳定 hydrology
+  字段之后冻结。火山继续作为独立后续课题。
 - 当前代码状态：`RTF_ADVANCED` 的纯数学、`Perlin2`、golden fixture、完整大陆信号以及
   受控 `EndHeightmap` / finite volume / preview 内部接线已经完成，并通过 common、双平台
   编译和发布包自动门禁；但 validator、Codec 和编辑器仍明确拒绝该算法，真实客户端、
@@ -312,9 +330,10 @@ C2ME 兼容的最低要求：没有依赖线程顺序的随机数，没有跨 wo
   `EndTerrainVolcanoRuntime` 只是一份封闭的内部几何草稿。用户已确认 RTF 火山仍未完成，
   因此该草稿冻结，不再以 RTF 火山为来源继续推进；它不是已完成火山功能，也不会进入玩家
   preset、`format_version=4` 或 UI。
-- 版本策略：`0.1.8` 只作为兼容与安全基线；真正替换当前拙劣地表原型的是
-  `format_version=4` 的 `0.2.0` 高质量路线。已有 v3 preset 永久保持 legacy，不得随
-  jar 更新静默改变未生成区块。
+- 版本策略：`0.1.8` 只作为兼容与安全基线；`format_version=4` 的 `0.2.0` 交付高质量宏观地表、
+  获选表面侵蚀、final metrics、preview 和性能兼容门禁，但不静默加入真实河流水文。
+  `format_version=5` 的 `0.2.x` 再交付 authoritative hydrology artifact、河谷、湖泊和真实水体。
+  已有 v3/v4 preset 永久保持各自语义，不得随 jar 更新静默改变未生成区块。
 - RTF 复用策略：优先吸收高级大陆、统一 terrain region、构造期 terrain catalog、区域
   稳定 morphology variant、成熟地貌 primitive、有限 ridge envelope 和后处理信号链。火山
   不从 RTF 当前开发线迁移；气候、surface、structure、预览与侵蚀只复用设计契约并改造成
@@ -322,9 +341,12 @@ C2ME 兼容的最低要求：没有依赖线程顺序的随机数，没有跨 wo
 - RTF 禁止边界：不移植 `GeneratorContext`、可变/池化 `Cell`、主世界水位与海洋、
   `RiverCache`、私有 worldgen executor、全局可变 biome cache、独占 Mixin、RTF UI 或
   RTF cave。
-- 交付策略：不把 RTF 的所有地貌一次性搬入。`0.2.0` 先以平原/丘陵/高原、有限山系、
-  群岛海岸和 analytical erosion 构成一个完整垂直切片；中心抬升穹顶明确不属于 ETF 路线；火山、badlands、
-  torridonian、hydraulic erosion、复杂火山流槽、动态世界规格和 3D 旋转预览均在该切片
-  通过真实客户端、JFR 与兼容矩阵后再扩展。
-- 预计剩余工作量：约 28-40 个大段开发轮次，取决于高质量地表重建、真实客户端回归、Content Pack、C2ME/整合包兼容结果、宏大地下系统收束以及 3D 预览是否进入首个稳定版本。
-- 当前最大风险：当前地表原型的自动测试覆盖可能掩盖视觉架构不足；中央原版保护、RTF 同载和最新有限大陆底面尚未完成真实客户端回归，Standard 也缺少 JFR 性能基线；Content Pack loader、动态世界规格和正式地下河仍未实现；长期工作树包含大量未跟踪实现，需要尽快形成可审查提交。
+- 交付策略：不把 RTF 的所有地貌或旧侵蚀链一次性搬入。`0.2.0` 先以平原/丘陵/高原、有限山系、
+  群岛海岸和经过 bake-off 的最小表面侵蚀组合构成完整垂直切片；中心抬升穹顶明确不属于 ETF 路线。
+  RTF hydraulic 只作为 primitive SoA 候选，2024 multigrid 因缺少成熟可验证实现降为研究储备；
+  火山、badlands、torridonian、真实水文、动态世界规格和 3D 旋转预览在该切片通过客户端、JFR 与兼容矩阵后分阶段扩展。
+- 预计剩余工作量：约 34-50 个大段开发轮次，主要取决于 P4.7 算法选型、v5 hydrology artifact、
+  Content Pack、C2ME/整合包兼容、宏大地下系统和高级预览的实测结果。
+- 当前最大风险：P4.7 尚缺 allocation 与四组合 JFR，候选可能在 fixture 中视觉优秀但在真实区块调度下
+  产生首 tile 峰值、重复构建或客户端渲染压力；完整 3D 水文只有研究与 proof，没有 ETF production runtime、
+  跨 domain、JDK 21 replay 或 Minecraft 性能证据；Content Pack loader、动态世界规格和正式地下河仍未实现。

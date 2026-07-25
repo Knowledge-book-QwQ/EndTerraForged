@@ -352,6 +352,18 @@
 - P4.7 微基准的测量区间禁止使用会创建 iterator 的增强 `for` 遍历 fixture 集合。首次 thermal allocation
   观测的 `4,096 bytes total / 3.2 bytes per apply` 来自 benchmark harness，而不是 runtime；固定数组按下标
   遍历后归零。后续 tile candidate 的 allocation 也必须先排除夹具、输出和计数器自身分配。
+- 2026-07-26 canonical tile substrate 固定为 stable value key + immutable primitive SoA artifact + worker-owned
+  bounded fully-associative harness cache。key 按值包含 algorithm/version、seed、runtime fingerprint、world
+  bounds、terrain version、tile X/Z 和 sample geometry；负坐标使用 `floorDiv`。input artifact 固定为 source top
+  blocks、landness、inlandness、outer activation、roughness、resistance、thickness、ridge influence、AREA family、
+  terrain tags 和 mask bits，构建器只能转交全新数组 ownership，artifact 不暴露内部数组。
+- substrate cache 只用于候选测量，不预选 production cache；每个 worker 独占，owner swap 清表但不计 eviction，
+  failed build 不发布。跨 worker duplicate builds 由 test-only ledger 测量，不在此阶段引入 single-flight。4 个
+  共享 key 的 1/2/4/6 worker 测试记录 `0/4/12/20` duplicate builds，checksum 逐位一致。
+- substrate-only 本机观测为 cold p50/p95 `0.032-0.050/0.217-0.314 ms`、warm p50/p95
+  `1.7/5.9-12.5 us`、input tile `44,649` primitive bytes、16-slot peak resident `714,384` bytes、cold
+  `44,960 bytes/build` 和 warm `0 bytes/hit`。这些数字只描述输入 artifact 与 harness cache，不能冒充
+  hydraulic/flow candidate peak、border、Minecraft、C2ME 或 JFR 结果。
 - RTF droplet 可移植 gradient、inertia、capacity、erosion/deposition、evaporation 与 filter 顺序，但不能
   搬入 `Cell[]`、per-cell `int[][]/float[][]` brush、单尺寸 `WorldErosion`、私有 worldgen executor、对象池
   或 scheduled cache。ETF 候选使用 primitive SoA、canonical world-space tile/source、fixed halo 和有界

@@ -183,6 +183,42 @@ P4.7b 的第一条候选只建立无缓存、固定成本的 thermal/talus 对�
 `19.1-19.3 ns/output cell`、`17,424` primitive scratch bytes 和预热后当前线程 `0 bytes/apply`；这些数字只描述
 无缓存 canonical fixture 调用，不代表 tile peak、C2ME worker、客户端、整机 allocation 或正式区块成本。
 
+## 8.2 Canonical primitive tile substrate 契约
+
+P4.7b 的第二切片只建立候选共用的 tile 输入、key、worker cache 和测量边界，不实现 hydraulic、
+Priority-Flood、flow accumulation 或 stream-power：
+
+- tile key 必须按值包含 algorithm id/version、world seed、runtime fingerprint、world bounds、terrain
+  version、canonical tile X/Z、sample width/height、halo samples 和 sample distance。key 不使用对象 identity、
+  worker id、请求序号或区块访问顺序。
+- canonical tile origin 由 `floorDiv(block, coreSizeBlocks)` 计算，负坐标与正坐标使用同一数学分区；core
+  block size 由 `(sampleSize - 2 * halo) * sampleDistance` 唯一决定。
+- immutable input artifact 使用 primitive SoA，第一版固定包含 source top blocks、landness、inlandness、
+  outer activation、roughness、erosion resistance、available thickness、ridge influence、AREA family、
+  terrain tags 和 mask bits。mask bits 至少区分 erosion-protected 与 archipelago-dominant。
+- artifact 构建器只能把全新数组的 ownership 转交给 artifact；发布后不得保留可写引用。artifact 只暴露
+  按 index/XZ 的 primitive getter、稳定 checksum 和精确 primitive bytes，不暴露内部数组。
+- harness cache 固定为 worker-owned、非线程安全、有界 fully-associative cache；owner 由稳定 runtime
+  fingerprint 判断，owner 变化时整表清空并记录 owner swap。该布局只用于候选测量，不预选 production cache。
+- cache 记录 request、hit、miss、successful build、eviction、owner swap、current/peak resident primitive
+  bytes 和 builder-reported peak primitive bytes。build 失败不得发布半成品。
+- 多 worker duplicate builds 由 test-only 外部 ledger 按稳定 key 汇总为 `successful builds - distinct keys`；
+  首切片只测量重复，不引入 shared single-flight、executor、scheduled cleanup 或跨 worker mutable cache。
+- cold build 与 warm hit 分开记录 p50/p95；allocation 测量必须排除 fixture iterator、输出格式化和 ledger
+  自身分配。substrate 的输入 artifact bytes 不得冒充后续 hydraulic/flow 候选的 peak artifact bytes。
+- 1/2/4/6 worker、正负 tile 坐标、不同请求顺序、eviction 和 owner swap 都必须保持每个 key 的 checksum
+  逐位一致。相邻 tile border continuity 只有实际算法写入输出 channel 后才作为候选门禁，substrate 不伪造。
+
+该 substrate 仍不得接入 `EndDensity`、preview、preset 或 UI。只有实际 RTF-derived hydraulic SoA tile 与
+Priority-Flood/flow/stream-power tile 建立后，才分别记录它们的 scratch、peak artifact、duplicate build、
+border bits 和 cold/warm 成本。
+
+2026-07-26 substrate 已按上述契约实现。canonical 33 x 33 input tile 为 `44,649` primitive bytes，16-slot
+harness cache peak resident 为 `714,384` bytes；本机两次 common 测试记录 cold build p50/p95
+`0.032-0.050/0.217-0.314 ms`、warm hit p50/p95 `1.7/5.9-12.5 us`、cold `44,960 bytes/build` 和 warm
+`0 bytes/hit`。4 个共享 key 的 1/2/4/6 worker duplicate builds 为 `0/4/12/20`，checksum 相同。以上仍是
+substrate-only 证据，不包含任何 hydraulic、routing、incision、border output 或 production cache 成本。
+
 ## 9. 接入与缓存
 
 最终获选算法的正式接入点是 `EndDensity.ColumnCache.refresh()` 所消费的 heightmap top 路径：

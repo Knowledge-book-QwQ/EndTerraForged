@@ -37,12 +37,16 @@ final class ErosionFixture {
     private final float[] roughness;
     private final float[] erosionResistance;
     private final float[] availableThicknessBlocks;
+    private final float[] ridgeInfluence;
+    private final int[] areaFamily;
+    private final int[] terrainTags;
     private final boolean[] erosionMasked;
     private final boolean[] archipelagoDominant;
 
     private ErosionFixture(Kind kind, float[] rawTop, float[] landness,
                            float[] inlandness, float[] outerActivation, float[] roughness,
                            float[] erosionResistance, float[] availableThicknessBlocks,
+                           float[] ridgeInfluence, int[] areaFamily, int[] terrainTags,
                            boolean[] erosionMasked, boolean[] archipelagoDominant) {
         this.kind = kind;
         this.rawTop = rawTop;
@@ -52,6 +56,9 @@ final class ErosionFixture {
         this.roughness = roughness;
         this.erosionResistance = erosionResistance;
         this.availableThicknessBlocks = availableThicknessBlocks;
+        this.ridgeInfluence = ridgeInfluence;
+        this.areaFamily = areaFamily;
+        this.terrainTags = terrainTags;
         this.erosionMasked = erosionMasked;
         this.archipelagoDominant = archipelagoDominant;
     }
@@ -79,6 +86,9 @@ final class ErosionFixture {
         float[] roughness = new float[cells];
         float[] erosionResistance = new float[cells];
         float[] availableThicknessBlocks = new float[cells];
+        float[] ridgeInfluence = new float[cells];
+        int[] areaFamily = new int[cells];
+        int[] terrainTags = new int[cells];
         boolean[] erosionMasked = new boolean[cells];
         boolean[] archipelagoDominant = new boolean[cells];
         int centre = SIZE / 2;
@@ -95,8 +105,12 @@ final class ErosionFixture {
                 inlandness[index] = Math.clamp(1.0F - radius * 1.8F, 0.0F, 1.0F);
                 outerActivation[index] = 1.0F;
                 roughness[index] = roughness(kind);
-                erosionResistance[index] = erosionResistance(kind, v, radius);
+                ridgeInfluence[index] = ridgeInfluence(kind, v);
+                erosionResistance[index] = erosionResistance(
+                        kind, radius, ridgeInfluence[index]);
                 availableThicknessBlocks[index] = 4.0F + 156.0F * landness[index];
+                areaFamily[index] = kind.ordinal() + 1;
+                terrainTags[index] = terrainTags(kind);
                 erosionMasked[index] = kind == Kind.COAST_THIN_SHELF;
                 archipelagoDominant[index] = kind == Kind.ARCHIPELAGO_WINDOW
                         && islandSignal(u, v) > 0.42F;
@@ -104,6 +118,7 @@ final class ErosionFixture {
         }
         return new ErosionFixture(kind, rawTop, landness, inlandness, outerActivation,
                 roughness, erosionResistance, availableThicknessBlocks,
+                ridgeInfluence, areaFamily, terrainTags,
                 erosionMasked, archipelagoDominant);
     }
 
@@ -175,6 +190,22 @@ final class ErosionFixture {
         return availableThicknessBlocks;
     }
 
+    float[] roughnessValues() {
+        return roughness;
+    }
+
+    float[] ridgeInfluenceValues() {
+        return ridgeInfluence;
+    }
+
+    int[] areaFamilyValues() {
+        return areaFamily;
+    }
+
+    int[] terrainTagsValues() {
+        return terrainTags;
+    }
+
     boolean[] erosionMaskedValues() {
         return erosionMasked;
     }
@@ -218,6 +249,10 @@ final class ErosionFixture {
                         * 0x100000001B3L;
                 cell = (cell ^ Float.floatToIntBits(availableThicknessBlocks[index]))
                         * 0x100000001B3L;
+                cell = (cell ^ Float.floatToIntBits(ridgeInfluence[index]))
+                        * 0x100000001B3L;
+                cell = (cell ^ areaFamily[index]) * 0x100000001B3L;
+                cell = (cell ^ terrainTags[index]) * 0x100000001B3L;
                 cell = (cell ^ (erosionMasked[index] ? 1L : 0L)) * 0x100000001B3L;
                 cell = (cell ^ (archipelagoDominant[index] ? 1L : 0L)) * 0x100000001B3L;
                 checksum += cell;
@@ -264,11 +299,27 @@ final class ErosionFixture {
         };
     }
 
-    private static float erosionResistance(Kind kind, float v, float radius) {
+    private static float ridgeInfluence(Kind kind, float v) {
+        return kind == Kind.RIDGE
+                ? Math.clamp((float) Math.exp(-v * v * 42.0F), 0.0F, 1.0F)
+                : 0.0F;
+    }
+
+    private static float erosionResistance(Kind kind, float radius, float ridgeInfluence) {
         return switch (kind) {
-            case RIDGE -> Math.clamp((float) Math.exp(-v * v * 42.0F), 0.0F, 1.0F);
+            case RIDGE -> ridgeInfluence;
             case PLATEAU_EDGE -> 1.0F - smoothStep(0.42F, 0.50F, radius);
             default -> 0.0F;
+        };
+    }
+
+    private static int terrainTags(Kind kind) {
+        return switch (kind) {
+            case RIDGE -> 1;
+            case PLATEAU_EDGE -> 1 << 1;
+            case COAST_THIN_SHELF -> 1 << 2;
+            case ARCHIPELAGO_WINDOW -> 1 << 3;
+            default -> 0;
         };
     }
 

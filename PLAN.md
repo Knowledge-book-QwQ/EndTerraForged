@@ -15,9 +15,9 @@
 - 2026-07-18 路线校正：RTF 最新地形区架构已经用预览和实机证据否决“RIDGE 拥有完整宏观区域”的 S4.2 语义。P4 的首个生产契约由正权重 `AREA` 地貌组成统一、无空洞的 terrain ownership 分区；`RIDGE` 使用独立、有界 anchor overlay，不能夺取宏观 owner。RTF 最新火山线已有较成熟候选，但 ETF 当前仍因阶段范围和末地语义冻结 `COMPACT`，不将其纳入本轮 ownership。完整结论见 [`docs/reviews/RTF_TERRAIN_REGION_ARCHITECTURE_REVIEW_2026-07-18.md`](docs/reviews/RTF_TERRAIN_REGION_ARCHITECTURE_REVIEW_2026-07-18.md)。
 - P4.6 精确 jar 的新世界和 ETF/RTF/C2ME 客户端验收已闭环。P4.7-0A 自动基线现已覆盖 cache、
   raw/full evaluation、cold/warm、chunk traversal 和当前线程 allocation；P4.7-0B 四组合客户端/JFR
-  由独立实机轨道采集。P4.7b 已完成无缓存、固定 2-pass/4-neighbour 的 bounded thermal 对照，下一步建立
-  test-only canonical primitive tile substrate 与真实 tile 指标；在四组合 JFR、tile peak bytes 和
-  duplicate build 门禁完成前，不得宣布候选胜出、重写 production cache 或接入 `EndDensity`。
+  由独立实机轨道采集。P4.7b 已完成 bounded thermal 对照和 test-only canonical primitive tile substrate；
+  下一步实现第一种真实 tile 算法 RTF-derived hydraulic primitive SoA。在四组合 JFR 和每种实际候选的
+  peak/duplicate/border 门禁完成前，不得宣布候选胜出、重写 production cache 或接入 `EndDensity`。
   2024 analytical/multigrid 暂为研究储备；当前 legacy terrain 只作为迁移与性能基线，不继续投入大段视觉修补。
 - 原版主岛、黑曜石柱、龙战、返回门、网关及外围区域当前冻结，不属于近期修改范围。
 - 内容扩展路线已从 biome-only 升级为 ETF Worldgen Content Pack API；当前仅有规格，没有 loader/runtime。
@@ -411,9 +411,16 @@ surface、structure 与后续 Content Pack 只能消费这些正式信号，禁�
   flat/plane、spike 守恒、ridge/plateau、coast/thin shelf、archipelago、顺序和多线程门禁通过。一次完整
   common 测试中的本机观测为 `19.1-19.3 ns/output cell`、`17,424` primitive scratch bytes、预热后当前线程
   `0 bytes/apply`；这些不是 tile peak、跨机器阈值或 Minecraft runtime 证据。
-- [ ] **P4.7b candidate bake-off**：下一步建立 test-only canonical primitive tile substrate 与真实
-  peak/duplicate/cold-warm/owner/eviction/worker instrumentation；随后以同一 input artifact 比较 RTF droplet
-  primitive SoA tile 与 Priority-Flood + adaptive flow + stream-power。2024 multigrid 保持研究储备。
+- [x] 2026-07-26 完成 canonical primitive tile substrate：stable value key 覆盖 algorithm/world/runtime/
+  bounds/terrain/tile/geometry，immutable SoA input artifact 固定 8 float + 2 int + 1 byte channel；worker-owned
+  bounded cache 记录 hit/miss/build/eviction/owner swap、resident/build primitive peak。正负坐标、128/256
+  block core、build failure、请求重排和 1/2/4/6 worker checksum 通过；4 个共享 key 的 duplicate builds
+  分别为 `0/4/12/20`。本机 substrate-only 观测为 cold p50/p95 `0.032-0.050/0.217-0.314 ms`、warm
+  p50/p95 `1.7/5.9-12.5 us`、input tile `44,649` primitive bytes、16-slot peak resident `714,384` bytes、
+  cold `44,960 bytes/build`、warm `0 bytes/hit`。这些不是 hydraulic/flow 候选成本。
+- [ ] **P4.7b candidate bake-off**：下一步在同一 substrate 上实现 RTF-derived hydraulic primitive SoA tile，
+  记录真实 scratch/peak/duplicate/border/cold-warm 指标；随后实现 Priority-Flood + adaptive flow + stream-power
+  对照。2024 multigrid 保持研究储备。
 - [ ] **P4.7c selection**：以视觉质量、volume safety、首块 p95、内存、分块边界、访问顺序、C2ME 和 JFR
   为同等硬门禁，选择最小组合；未同时通过不得接入正式 `EndDensity`。
 - [ ] **P4.7d production integration**：获选组合只对受控 `REGION_PLANNED` 接入列缓存或 final immutable tile

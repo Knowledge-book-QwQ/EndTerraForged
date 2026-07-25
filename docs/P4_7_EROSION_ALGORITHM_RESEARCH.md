@@ -388,9 +388,11 @@ tile X/Z 和必要的 Content-independent terrain version。不能使用对象 i
   4-array primitive scratch、保护 mask、resistance 和 thickness budget。2026-07-26 本机 common 测试观测为
   `19.1-19.3 ns/output cell`、`17,424` primitive scratch bytes、预热后当前线程 `0 bytes/apply`；它不具备排水
   能力，也不是获选结论。
-- 下一步建立 canonical primitive tile substrate，并在实际 tile 候选中记录 peak bytes、duplicate build、
-  cold/warm、owner/eviction 和多 worker checksum；不能把 thermal scratch 数字冒充 tile artifact 指标。
-- RTF droplet 改写为 primitive SoA tile。
+- canonical primitive tile substrate 已完成 stable key、immutable SoA input、worker-owned bounded cache、
+  owner/eviction、failed-build、cold/warm、allocation、duplicate build 和 1/2/4/6 worker checksum 门禁。
+  input tile 为 `44,649` primitive bytes；这些 substrate 数字不能冒充候选算法 peak。
+- 下一步将 RTF droplet 改写为 primitive SoA tile，并记录其独立 scratch、artifact peak、duplicate build、
+  border bits 与 cold/warm 指标。
 - Priority-Flood + adaptive flow + stream-power 做 bounded drainage/incision 原型，不发布水文 authority。
 - 2024 analytical/multigrid 保留在研究名单；只有以上候选均无法通过质量或性能门禁时才投入实现。
 

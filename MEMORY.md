@@ -1,7 +1,7 @@
 # EndTerraForged 项目记忆
 
 > 文档状态：当前有效。
-> 最近整理：2026-07-25。
+> 最近整理：2026-07-26。
 > 本文件只记录长期有效的架构决策、踩坑和兼容经验；当前任务见 [`PLAN.md`](PLAN.md)，完整产品路线见 [`GOAL.md`](GOAL.md)。
 
 ## 1. 产品与平台决策
@@ -341,8 +341,17 @@
 - 2026-07-23 新增 `EndAnalyticalErosionRuntime` 作为候选 baseline：immutable、无 world/cache/executor，
   只写 caller-owned buffer；ridge 只做保护，basin 只输出 drainage potential，首批不挖排水几何。中央
   activation、低 landness、薄 shelf 与 archipelago-dominant 列必须零影响；该 runtime 尚未接入 `EndDensity`。
-  同一 canonical fixture 的一次完整 common 测试为 `39.1 ns/sample`，仅代表 local primitive 成本，不能
-  代替列缓存、C2ME、JFR 或客户端性能证据。
+  2026-07-26 将性能夹具改为固定数组下标遍历并补齐 resistance channel 后，同一 canonical fixture 的
+  两次 common 测试为 `34.7-35.4 ns/sample`；仅代表 local primitive 成本，不能代替列缓存、C2ME、JFR
+  或客户端性能证据。
+- 2026-07-26 完成 test-only bounded thermal 对照：固定 2 次同步 pass、4 邻域、2-cell halo，使用
+  caller-owned 4-array primitive scratch、保护 mask、resistance 与 thickness export budget。flat/plane、
+  spike 守恒、ridge/plateau、coast/thin shelf、archipelago、顺序与多线程门禁通过；本机观测为
+  `19.1-19.3 ns/output cell`、`17,424` primitive scratch bytes 和预热后当前线程 `0 bytes/apply`。该 runtime
+  无排水能力、无 tile/cache/executor，未接 `EndDensity`，不代表正式算法获选。
+- P4.7 微基准的测量区间禁止使用会创建 iterator 的增强 `for` 遍历 fixture 集合。首次 thermal allocation
+  观测的 `4,096 bytes total / 3.2 bytes per apply` 来自 benchmark harness，而不是 runtime；固定数组按下标
+  遍历后归零。后续 tile candidate 的 allocation 也必须先排除夹具、输出和计数器自身分配。
 - RTF droplet 可移植 gradient、inertia、capacity、erosion/deposition、evaporation 与 filter 顺序，但不能
   搬入 `Cell[]`、per-cell `int[][]/float[][]` brush、单尺寸 `WorldErosion`、私有 worldgen executor、对象池
   或 scheduled cache。ETF 候选使用 primitive SoA、canonical world-space tile/source、fixed halo 和有界
@@ -383,7 +392,7 @@
   可许可复用且可在 Java 21/Minecraft 中独立验证的实现，降为前三条均不达标时才恢复的研究储备。
 - P4.7 的 analytical runtime 已实现为 immutable test-only candidate，并通过 canonical fixture 与
   量纲测试；它尚未进入 `EndDensity` 或 production preview，不得再把规格写成“runtime 未实现”，
-  也不得把 `39.1 ns/sample` 当作正式区块性能证据。
+  也不得把 JUnit fixture 的 `ns/sample` 当作正式区块性能证据。
 - 3D 水文规划权威文档为
   [`docs/P5_3D_HYDROLOGY_ARCHITECTURE_PLAN.md`](docs/P5_3D_HYDROLOGY_ARCHITECTURE_PLAN.md)。
   RTF R10X proof 只证明算法契约可行；JDK 21 replay、Minecraft runtime、跨 domain、缓存生命周期、

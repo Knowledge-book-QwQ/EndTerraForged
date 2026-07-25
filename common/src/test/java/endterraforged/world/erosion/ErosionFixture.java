@@ -33,17 +33,26 @@ final class ErosionFixture {
     private final float[] rawTop;
     private final float[] landness;
     private final float[] inlandness;
+    private final float[] outerActivation;
+    private final float[] roughness;
+    private final float[] erosionResistance;
     private final float[] availableThicknessBlocks;
+    private final boolean[] erosionMasked;
     private final boolean[] archipelagoDominant;
 
     private ErosionFixture(Kind kind, float[] rawTop, float[] landness,
-                           float[] inlandness, float[] availableThicknessBlocks,
-                           boolean[] archipelagoDominant) {
+                           float[] inlandness, float[] outerActivation, float[] roughness,
+                           float[] erosionResistance, float[] availableThicknessBlocks,
+                           boolean[] erosionMasked, boolean[] archipelagoDominant) {
         this.kind = kind;
         this.rawTop = rawTop;
         this.landness = landness;
         this.inlandness = inlandness;
+        this.outerActivation = outerActivation;
+        this.roughness = roughness;
+        this.erosionResistance = erosionResistance;
         this.availableThicknessBlocks = availableThicknessBlocks;
+        this.erosionMasked = erosionMasked;
         this.archipelagoDominant = archipelagoDominant;
     }
 
@@ -66,7 +75,11 @@ final class ErosionFixture {
         float[] rawTop = new float[cells];
         float[] landness = new float[cells];
         float[] inlandness = new float[cells];
+        float[] outerActivation = new float[cells];
+        float[] roughness = new float[cells];
+        float[] erosionResistance = new float[cells];
         float[] availableThicknessBlocks = new float[cells];
+        boolean[] erosionMasked = new boolean[cells];
         boolean[] archipelagoDominant = new boolean[cells];
         int centre = SIZE / 2;
         for (int z = 0; z < SIZE; z++) {
@@ -80,13 +93,18 @@ final class ErosionFixture {
                 rawTop[index] = Math.clamp(top, 0.05F, 0.95F);
                 landness[index] = Math.clamp(land, 0.0F, 1.0F);
                 inlandness[index] = Math.clamp(1.0F - radius * 1.8F, 0.0F, 1.0F);
+                outerActivation[index] = 1.0F;
+                roughness[index] = roughness(kind);
+                erosionResistance[index] = erosionResistance(kind, v, radius);
                 availableThicknessBlocks[index] = 4.0F + 156.0F * landness[index];
+                erosionMasked[index] = kind == Kind.COAST_THIN_SHELF;
                 archipelagoDominant[index] = kind == Kind.ARCHIPELAGO_WINDOW
                         && islandSignal(u, v) > 0.42F;
             }
         }
-        return new ErosionFixture(kind, rawTop, landness, inlandness,
-                availableThicknessBlocks, archipelagoDominant);
+        return new ErosionFixture(kind, rawTop, landness, inlandness, outerActivation,
+                roughness, erosionResistance, availableThicknessBlocks,
+                erosionMasked, archipelagoDominant);
     }
 
     Kind kind() {
@@ -113,12 +131,56 @@ final class ErosionFixture {
         return inlandness[cellIndex(x, z)];
     }
 
+    float outerActivation(int x, int z) {
+        return outerActivation[cellIndex(x, z)];
+    }
+
+    float roughness(int x, int z) {
+        return roughness[cellIndex(x, z)];
+    }
+
+    float erosionResistance(int x, int z) {
+        return erosionResistance[cellIndex(x, z)];
+    }
+
     float availableThicknessBlocks(int x, int z) {
         return availableThicknessBlocks[cellIndex(x, z)];
     }
 
     boolean archipelagoDominant(int x, int z) {
         return archipelagoDominant[cellIndex(x, z)];
+    }
+
+    float[] rawTopValues() {
+        return rawTop;
+    }
+
+    float[] landnessValues() {
+        return landness;
+    }
+
+    float[] inlandnessValues() {
+        return inlandness;
+    }
+
+    float[] outerActivationValues() {
+        return outerActivation;
+    }
+
+    float[] erosionResistanceValues() {
+        return erosionResistance;
+    }
+
+    float[] availableThicknessValues() {
+        return availableThicknessBlocks;
+    }
+
+    boolean[] erosionMaskedValues() {
+        return erosionMasked;
+    }
+
+    boolean[] archipelagoDominantValues() {
+        return archipelagoDominant;
     }
 
     float slope(int x, int z) {
@@ -150,8 +212,13 @@ final class ErosionFixture {
                 cell = (cell ^ Float.floatToIntBits(rawTop[index])) * 0x100000001B3L;
                 cell = (cell ^ Float.floatToIntBits(landness[index])) * 0x100000001B3L;
                 cell = (cell ^ Float.floatToIntBits(inlandness[index])) * 0x100000001B3L;
+                cell = (cell ^ Float.floatToIntBits(outerActivation[index])) * 0x100000001B3L;
+                cell = (cell ^ Float.floatToIntBits(roughness[index])) * 0x100000001B3L;
+                cell = (cell ^ Float.floatToIntBits(erosionResistance[index]))
+                        * 0x100000001B3L;
                 cell = (cell ^ Float.floatToIntBits(availableThicknessBlocks[index]))
                         * 0x100000001B3L;
+                cell = (cell ^ (erosionMasked[index] ? 1L : 0L)) * 0x100000001B3L;
                 cell = (cell ^ (archipelagoDominant[index] ? 1L : 0L)) * 0x100000001B3L;
                 checksum += cell;
             }
@@ -187,6 +254,22 @@ final class ErosionFixture {
             return Math.clamp((top - 0.44F) * 3.4F, 0.0F, 1.0F);
         }
         return Math.clamp(0.72F - radius * 0.42F, 0.0F, 1.0F);
+    }
+
+    private static float roughness(Kind kind) {
+        return switch (kind) {
+            case ISOLATED_SPIKE, RIDGE, WATERSHED -> 0.90F;
+            case PARABOLOID, PLATEAU_EDGE, CLOSED_BASIN -> 0.60F;
+            default -> 0.35F;
+        };
+    }
+
+    private static float erosionResistance(Kind kind, float v, float radius) {
+        return switch (kind) {
+            case RIDGE -> Math.clamp((float) Math.exp(-v * v * 42.0F), 0.0F, 1.0F);
+            case PLATEAU_EDGE -> 1.0F - smoothStep(0.42F, 0.50F, radius);
+            default -> 0.0F;
+        };
     }
 
     private static float islandSignal(float u, float v) {

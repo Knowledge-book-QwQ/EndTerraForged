@@ -1,7 +1,7 @@
 # P4.7 Analytical Erosion 技术规格
 
 > 文档状态：当前有效；低成本 analytical baseline 的 test-only runtime 已实现，正式算法尚未选定，尚未接入 production density/preview。
-> 最近更新：2026-07-25。
+> 最近更新：2026-07-26。
 > 当前阶段：P4.6 客户端验收完成后，P4.7 候选基准中的低成本对照实现。
 > 算法选型与性能架构见 [`P4_7_EROSION_ALGORITHM_RESEARCH.md`](P4_7_EROSION_ALGORITHM_RESEARCH.md)。
 
@@ -155,6 +155,33 @@ Validator、Builder、runtime、preview 和测试，不能直接复用旧 drople
 
 中央启动带只能使用同一个 `outerActivation` 平滑门控，不能新增硬半径墙。海岸、薄 shelf 和群岛的
 零影响门禁必须有边界两侧定点测试。
+
+## 8.1 Bounded thermal 对照契约
+
+P4.7b 的第一条候选只建立无缓存、固定成本的 thermal/talus 对照，不接 production density：
+
+- 固定为 4 邻域、2 次同步 pass 和 2-cell halo；不得由 preset、机器负载或 worker 数改变。
+- 输入为 canonical primitive grid：source top、landness、inlandness、outer activation、
+  erosion resistance、available thickness、保护 mask 与 archipelago-dominant mask。
+- 每个 pass 只从当前高度网格读取，把超过固定 talus 的材料移动量累加到独立 delta 网格，再一次性发布
+  下一高度网格；禁止原地更新导致扫描方向改变结果。
+- 每个源格的输出材料使用固定 block 上限和 thickness budget；向 4 个较低邻格按超出 talus 的比例分配，
+  最后一个接收者吸收浮点余量，使源格扣减量与接收量一致。
+- `outerActivation == 0`、void、coast/thin shelf、保护 mask、厚度不足和 archipelago-dominant 格不参与
+  输出或接收；保护边界两侧都必须有定点测试。
+- resistance 只衰减材料输出，不改变 ownership 或输入信号。canonical ridge crest 与 plateau edge 使用
+  同一 resistance channel 证明它们不会被无条件抹平；isolated spike 必须出现有限、守恒的松弛。
+- runtime immutable、stateless、thread-safe；全部高度、delta 和剩余输出预算由 caller-owned primitive
+  buffer 持有。首切片不创建 tile、cache、executor、集合或每次调用对象。
+- 成本测试记录同一 fixture 的 `ns/output cell`、primitive scratch bytes 和 checksum，不设置跨机器硬阈值，
+  也不把 scratch bytes 误报为后续 tile candidate 的 peak artifact bytes。
+
+只有该对照在 flat/plane、spike、ridge、plateau、coast/thin shelf、archipelago、重复顺序和多线程测试中
+通过，才进入 canonical tile substrate；它本身不具备排水能力，也不预先成为正式获选算法。
+
+2026-07-26 第一切片已按上述契约实现。一次完整 common 测试中的本机 JDK 21 观测为
+`19.1-19.3 ns/output cell`、`17,424` primitive scratch bytes 和预热后当前线程 `0 bytes/apply`；这些数字只描述
+无缓存 canonical fixture 调用，不代表 tile peak、C2ME worker、客户端、整机 allocation 或正式区块成本。
 
 ## 9. 接入与缓存
 

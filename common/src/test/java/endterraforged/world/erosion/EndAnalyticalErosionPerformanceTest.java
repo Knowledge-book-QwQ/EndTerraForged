@@ -2,15 +2,14 @@ package endterraforged.world.erosion;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import java.util.List;
-
 import org.junit.jupiter.api.Test;
 
 class EndAnalyticalErosionPerformanceTest {
 
     private static final int WARMUP_PASSES = 32;
     private static final int MEASURE_PASSES = 128;
-    private static final List<ErosionFixture> FIXTURES = ErosionFixture.standardSet();
+    private static final ErosionFixture[] FIXTURES =
+            ErosionFixture.standardSet().toArray(ErosionFixture[]::new);
 
     @Test
     void recordsCanonicalFixtureCost() {
@@ -21,7 +20,7 @@ class EndAnalyticalErosionPerformanceTest {
         long start = System.nanoTime();
         long checksum = benchmark(runtime, output, MEASURE_PASSES);
         long elapsed = System.nanoTime() - start;
-        long samples = (long) MEASURE_PASSES * FIXTURES.size()
+        long samples = (long) MEASURE_PASSES * FIXTURES.length
                 * interiorSize() * interiorSize();
 
         assertTrue(checksum != 0L, "DCE guard: analytical erosion checksum must be non-zero");
@@ -35,11 +34,13 @@ class EndAnalyticalErosionPerformanceTest {
         long checksum = 0L;
         int end = ErosionFixture.SIZE - ErosionFixture.HALO;
         for (int pass = 0; pass < passes; pass++) {
-            for (ErosionFixture fixture : FIXTURES) {
+            for (int fixtureIndex = 0; fixtureIndex < FIXTURES.length; fixtureIndex++) {
+                ErosionFixture fixture = FIXTURES[fixtureIndex];
                 for (int z = ErosionFixture.HALO; z < end; z++) {
                     for (int x = ErosionFixture.HALO; x < end; x++) {
                         runtime.apply(fixture.rawTop(x, z), ErosionFixture.WORLD_HEIGHT_BLOCKS,
-                                fixture.slope(x, z), fixture.curvature(x, z), 1.0F, 0.0F,
+                                fixture.slope(x, z), fixture.curvature(x, z),
+                                fixture.roughness(x, z), fixture.erosionResistance(x, z),
                                 fixture.landness(x, z), fixture.inlandness(x, z), 1.0F,
                                 fixture.availableThicknessBlocks(x, z),
                                 fixture.archipelagoDominant(x, z), output);

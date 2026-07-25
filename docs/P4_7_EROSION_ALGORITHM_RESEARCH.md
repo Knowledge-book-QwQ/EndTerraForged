@@ -1,7 +1,7 @@
 # P4.7 侵蚀、排水与性能方案调研
 
-> 文档状态：当前有效，算法选型调研；不代表 runtime 已实现。
-> 最近更新：2026-07-25。
+> 文档状态：当前有效，算法选型调研；不代表正式 runtime 已选定或接入 production density。
+> 最近更新：2026-07-26。
 > 调研时间点：仓库、许可证和维护状态均以 2026-07-22 的上游事实为准。
 > 实现契约见 [`P4_7_ANALYTICAL_EROSION_SPEC.md`](P4_7_ANALYTICAL_EROSION_SPEC.md)。
 
@@ -384,7 +384,12 @@ tile X/Z 和必要的 Content-independent terrain version。不能使用对象 i
 
 ### P4.7b：候选原型
 
-- bounded thermal 先与 local analytical 组成最低成本对照。
+- bounded thermal 已完成第一版无缓存对照：固定 2 次同步 pass、4 邻域、2-cell halo，使用 caller-owned
+  4-array primitive scratch、保护 mask、resistance 和 thickness budget。2026-07-26 本机 common 测试观测为
+  `19.1-19.3 ns/output cell`、`17,424` primitive scratch bytes、预热后当前线程 `0 bytes/apply`；它不具备排水
+  能力，也不是获选结论。
+- 下一步建立 canonical primitive tile substrate，并在实际 tile 候选中记录 peak bytes、duplicate build、
+  cold/warm、owner/eviction 和多 worker checksum；不能把 thermal scratch 数字冒充 tile artifact 指标。
 - RTF droplet 改写为 primitive SoA tile。
 - Priority-Flood + adaptive flow + stream-power 做 bounded drainage/incision 原型，不发布水文 authority。
 - 2024 analytical/multigrid 保留在研究名单；只有以上候选均无法通过质量或性能门禁时才投入实现。

@@ -79,15 +79,18 @@ class EndAnalyticalErosionRuntimeTest {
         EndAnalyticalErosionBuffer basinOutput = new EndAnalyticalErosionBuffer();
 
         runtime.apply(ridge.rawTop(16, 16), ErosionFixture.WORLD_HEIGHT_BLOCKS,
-                ridge.slope(16, 16), ridge.curvature(16, 16), 1.0F, 0.0F,
+                ridge.slope(16, 16), ridge.curvature(16, 16),
+                ridge.roughness(16, 16), ridge.erosionResistance(16, 16),
                 ridge.landness(16, 16), ridge.inlandness(16, 16), OUTER_ACTIVATION,
                 ridge.availableThicknessBlocks(16, 16), false, ridgeOutput);
         runtime.apply(ridge.rawTop(16, 12), ErosionFixture.WORLD_HEIGHT_BLOCKS,
-                ridge.slope(16, 12), ridge.curvature(16, 12), 1.0F, 0.0F,
+                ridge.slope(16, 12), ridge.curvature(16, 12),
+                ridge.roughness(16, 12), ridge.erosionResistance(16, 12),
                 ridge.landness(16, 12), ridge.inlandness(16, 12), OUTER_ACTIVATION,
                 ridge.availableThicknessBlocks(16, 12), false, flankOutput);
         runtime.apply(basin.rawTop(16, 16), ErosionFixture.WORLD_HEIGHT_BLOCKS,
-                basin.slope(16, 16), basin.curvature(16, 16), 1.0F, 0.0F,
+                basin.slope(16, 16), basin.curvature(16, 16),
+                basin.roughness(16, 16), basin.erosionResistance(16, 16),
                 basin.landness(16, 16), basin.inlandness(16, 16), OUTER_ACTIVATION,
                 basin.availableThicknessBlocks(16, 16), false, basinOutput);
 
@@ -131,7 +134,8 @@ class EndAnalyticalErosionRuntimeTest {
         for (int z = start; z != end; z += step) {
             for (int x = start; x != end; x += step) {
                 runtime.apply(fixture.rawTop(x, z), ErosionFixture.WORLD_HEIGHT_BLOCKS,
-                        fixture.slope(x, z), fixture.curvature(x, z), 1.0F, 0.0F,
+                        fixture.slope(x, z), fixture.curvature(x, z),
+                        fixture.roughness(x, z), fixture.erosionResistance(x, z),
                         fixture.landness(x, z), fixture.inlandness(x, z), OUTER_ACTIVATION,
                         fixture.availableThicknessBlocks(x, z), fixture.archipelagoDominant(x, z), output);
                 checksum += Float.floatToIntBits(output.top());

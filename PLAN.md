@@ -378,14 +378,19 @@ surface、structure 与后续 Content Pack 只能消费这些正式信号，禁�
 - [x] 2026-07-23 建立 P4.7-0 smoke-profile 观测：固定 seed `123456789`、`(8192,8192)` 的 16 x 16
   profile traversal，ordered/shuffled checksum 相同；单次本机观察为 60,385.9 与 32,033.3 ns/profile。
   结果记录在 [`docs/reviews/P4_7_BASELINE_2026-07-23.md`](docs/reviews/P4_7_BASELINE_2026-07-23.md)，不作为性能门禁。
-- [x] 2026-07-23 为 `EndDensity.ColumnCache` 增加仅测试/dev 启用的 per-worker 指标，观察到 1,280 request、
-  1,024 hit、256 miss、82 collision/eviction 与 256 full-column refresh；ordered/shuffled density checksum 相同。
+- [x] 2026-07-25 扩展 `EndDensity.ColumnCache` 的仅测试/dev per-worker 指标：固定窗口仍观察到
+  1,280 request、1,024 hit、256 miss、82 collision/eviction 与 256 full-column refresh；新增的完整
+  height evaluation 为 256，ordered/shuffled 次数和 density checksum 相同。该计数准确覆盖
+  `EndHeightmap.getHeight`，不冒充其内部 raw-top 采样次数。
 - [x] 2026-07-23 完成 cold/warm 延迟观测切片：24 次 16 x 16 full-column traversal 记录 cold p50/p95
   `2.115/3.872 ms`、warm p50/p95 `1.452/3.161 ms`；该测试只建立可重复观测，不设置硬件相关阈值。
+- [x] 2026-07-25 增加 JDK 21 `ThreadMXBean` warm traversal allocation 观测；排除 profile、runtime、输出与
+  首次 owner swap 后，4 个 16 x 16 full-column chunk 在本机记录 `0 bytes`。不支持线程分配计数的 JVM
+  明确跳过测试，不伪造零值；该结果不替代 tile peak、C2ME worker 或 JFR allocation 证据。
 - [x] 2026-07-23 建立候选算法共用的 test-only primitive fixture：固定 33 x 33、2-cell halo、4-block sample
   distance 与 Standard 512 导数量纲，覆盖 flat、plane、paraboloid、isolated spike、ridge、plateau edge、
   closed basin、watershed、coast/thin shelf 和 archipelago window；候选必须消费同一 input artifact。
-- [ ] **P4.7-0 close**：补 raw-top evaluation、allocated bytes、tile peak bytes、cache duplicate builds，以及
+- [ ] **P4.7-0 close**：补内部 raw-top evaluation、tile peak bytes、cache duplicate builds，以及
   ETF、ETF+C2ME、ETF+RTF、ETF+RTF+C2ME 四组合服务器/客户端 JFR。没有这些证据，不得宣布任何候选胜出。
 - [x] 2026-07-23 完成 local analytical baseline：immutable `EndAnalyticalErosionRuntime` 与 caller-owned
   `EndAnalyticalErosionBuffer` 实现 slope/curvature、ridge protection、valley diagnosis、roughness/resistance、

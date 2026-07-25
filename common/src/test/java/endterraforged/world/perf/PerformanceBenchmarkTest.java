@@ -2,7 +2,9 @@ package endterraforged.world.perf;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
+import java.lang.management.ManagementFactory;
 import java.util.Arrays;
 import java.util.List;
 
@@ -288,7 +290,7 @@ class PerformanceBenchmarkTest {
      * <p>This is deliberately an observation rather than a performance gate.
      * It records ordered and deterministic shuffled access costs while the
      * cache counters, allocation sampling, full-column traversal and JFR
-     * matrix remain separate P4.7-0 work.</p>
+     * matrix are recorded by separate P4.7-0 observations.</p>
      */
     @Test
     void p46SmokeProfileChunkTraversalBaseline() {
@@ -389,6 +391,68 @@ class PerformanceBenchmarkTest {
                 System.clearProperty(property);
             } else {
                 System.setProperty(property, previous);
+            }
+        }
+    }
+
+    /**
+     * Records current-thread allocation for a warmed P4.6 density traversal.
+     * Setup, output and the initial cache-owner swap are outside the measured
+     * interval. JVMs without thread-allocation accounting skip this observation
+     * instead of reporting a misleading zero.
+     */
+    @Test
+    void p46SmokeDensityWarmAllocationBaseline() {
+        java.lang.management.ThreadMXBean platformBean = ManagementFactory.getThreadMXBean();
+        assumeTrue(platformBean instanceof com.sun.management.ThreadMXBean,
+                "JVM does not expose per-thread allocation accounting");
+        com.sun.management.ThreadMXBean allocationBean =
+                (com.sun.management.ThreadMXBean) platformBean;
+        assumeTrue(allocationBean.isThreadAllocatedMemorySupported(),
+                "JVM does not support per-thread allocation accounting");
+
+        boolean restoreDisabled = !allocationBean.isThreadAllocatedMemoryEnabled();
+        if (restoreDisabled) {
+            try {
+                allocationBean.setThreadAllocatedMemoryEnabled(true);
+            } catch (SecurityException | UnsupportedOperationException exception) {
+                assumeTrue(false, () -> "Cannot enable per-thread allocation accounting: "
+                        + exception.getMessage());
+            }
+        }
+
+        String property = EndPresetDevelopmentProfiles.P46_ARCHIPELAGO_SMOKE_TEST_PROPERTY;
+        String previous = System.getProperty(property);
+        System.setProperty(property, "true");
+        try {
+            EndPreset smoke = EndPresetDevelopmentProfiles.defaultFallback();
+            EndDensity density = new EndDensity(new EndHeightmap(smoke, P46_SMOKE_SEED));
+            densityChunkChecksum(density);
+
+            long threadId = Thread.currentThread().threadId();
+            long before = allocationBean.getThreadAllocatedBytes(threadId);
+            long checksum = 0L;
+            for (int chunk = 0; chunk < P46_MEASURE_CHUNKS; chunk++) {
+                checksum += densityChunkChecksum(density);
+            }
+            long allocatedBytes = allocationBean.getThreadAllocatedBytes(threadId) - before;
+
+            assertTrue(checksum != 0L, "DCE guard: allocation traversal checksum must be non-zero");
+            assertTrue(allocatedBytes >= 0L, "thread allocation counter must be monotonic");
+            System.out.printf(
+                    "[perf] p46SmokeDensityWarmAllocation: %d bytes total, %.1f bytes/chunk, "
+                            + "%.3f bytes/column%n",
+                    allocatedBytes,
+                    allocatedBytes / (double) P46_MEASURE_CHUNKS,
+                    allocatedBytes / (double) (P46_MEASURE_CHUNKS * P46_CHUNK_COLUMNS));
+        } finally {
+            if (previous == null) {
+                System.clearProperty(property);
+            } else {
+                System.setProperty(property, previous);
+            }
+            if (restoreDisabled) {
+                allocationBean.setThreadAllocatedMemoryEnabled(false);
             }
         }
     }

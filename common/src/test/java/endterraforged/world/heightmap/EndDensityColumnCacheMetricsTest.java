@@ -39,12 +39,18 @@ class EndDensityColumnCacheMetricsTest {
             assertTrue(ordered.collisions() > 0, "fixture should expose direct-map collisions");
             assertEquals(ordered.collisions(), ordered.evictions());
             assertTrue(ordered.fullColumnRefreshes() > 0);
+            assertEquals(ordered.fullColumnRefreshes(), ordered.heightEvaluations(),
+                    "each land-column refresh should perform one complete height evaluation");
+            assertEquals(ordered.heightEvaluations(), shuffled.heightEvaluations(),
+                    "height evaluation count must be independent of column access order");
             System.out.printf(
                     "[perf] p47ColumnCache ordered requests=%d hits=%d misses=%d collisions=%d "
-                            + "evictions=%d ownerSwaps=%d fullColumnRefreshes=%d; shuffled misses=%d collisions=%d%n",
+                            + "evictions=%d ownerSwaps=%d fullColumnRefreshes=%d heightEvaluations=%d; "
+                            + "shuffled misses=%d collisions=%d heightEvaluations=%d%n",
                     ordered.requests(), ordered.hits(), ordered.misses(), ordered.collisions(),
                     ordered.evictions(), ordered.ownerSwaps(), ordered.fullColumnRefreshes(),
-                    shuffled.misses(), shuffled.collisions());
+                    ordered.heightEvaluations(), shuffled.misses(), shuffled.collisions(),
+                    shuffled.heightEvaluations());
         } finally {
             EndDensity.configureColumnCacheMetrics(false);
             if (previous == null) {

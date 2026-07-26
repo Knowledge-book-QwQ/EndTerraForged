@@ -397,6 +397,15 @@
 - bounded flow 只做 stream-power dry incision，不沉积、不发布 sediment/water profile。输出为五个
   `float[]` 加一个非权威 direction `byte[]`；scratch 为每格 27 primitive bytes 加 1,176-byte fixed flood
   heap。golden checksum 为 `5601421594159001151L`。
+- 2026-07-26 统一 synthetic visual matrix 固定使用 256-block core、4-block sampling、16-sample halo、
+  world-space fixture 和共享 delta/drainage 色标。analytical-only 产生大范围无方向 flank cut，thermal-only
+  暴露明显 4-neighbor 十字/网格取向，因此二者不再作为独立最终外观候选；thermal 只保留为低强度 bounded
+  smoothing。hydraulic 的风险是高频切削/沉积噪声，bounded flow 的风险是 D8 八射线、轴向直线和固定步数
+  channel；两者都只能进入实机 finalist，尚未获选或组合。
+- “零影响”必须包含所有公开输出通道，不只是 final top/delta。visual matrix 首次发现 analytical 在
+  `archipelagoDominant` activation 为零时仍发布 drainage；runtime 和测试已修为 delta、strength、drainage、
+  activation 全部严格归零。未来任何候选的保护区、void、coast、薄 shelf 和 archipelago gate 都必须按
+  artifact 全通道验证。
 - hydraulic 与 bounded flow benchmark 已统一到同一 world-space `FLOW_FIELD`。本轮 JDK 21 观测中，
   hydraulic 128/256 cold p50/p95 范围为 `3.570-4.242/4.156-5.023 ms`、
   `4.685-5.234/5.152-5.921 ms`；bounded flow 为 `3.950-4.684/5.341-5.717 ms`、

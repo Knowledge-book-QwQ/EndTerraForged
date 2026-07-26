@@ -54,7 +54,8 @@ tile，以及 bounded Priority-Flood + flow accumulation + stream-power。2024 a
    `PreviewErosionGrid` 使用。其参数已进入 v3 Codec、Builder 和 UI，不能改义为新 analytical runtime。
 5. 旧 preview 会分配 `Cell[]` 并运行独立 droplet 数学，不能作为 P4.7 正式 runtime。
 6. `EndAnalyticalErosionRuntime` 与 caller-owned `EndAnalyticalErosionBuffer` 已实现，并在 canonical
-   fixture、确定性、零影响边界和性能观测中使用；当前没有 production `EndDensity` 或 preview caller。
+   fixture、确定性、零影响边界和性能观测中使用；activation 为零时 delta、strength、drainage 和
+   activation 全部严格归零。当前没有 production `EndDensity` 或 preview caller。
 
 ## 4. 第一切片边界
 
@@ -304,9 +305,10 @@ baseline 与候选台至少覆盖：
 3. **P4.7a local analytical baseline**：修正导数量纲，新增 immutable analytical runtime 与
    caller-owned output，只跑纯单元测试和统一 fixture，不接正式 top。
 4. **P4.7b candidate bake-off**：bounded thermal、canonical tile substrate、RTF-derived hydraulic SoA
-   tile 与 bounded Priority-Flood + adaptive flow + stream-power 已完成 test-only 自动门禁。bounded flow
-   契约见 [`P4_7_BOUNDED_FLOW_EROSION_SPEC.md`](P4_7_BOUNDED_FLOW_EROSION_SPEC.md)。下一步进行同图视觉
-   审查与 P4.7-0B JFR；2024 analytical/multigrid 只在现有候选均失败时恢复。
+   tile、bounded Priority-Flood + adaptive flow + stream-power 和统一 synthetic 同图视觉审查已完成。
+   bounded flow 契约见 [`P4_7_BOUNDED_FLOW_EROSION_SPEC.md`](P4_7_BOUNDED_FLOW_EROSION_SPEC.md)，视觉证据见
+   [`reviews/P4_7_CANDIDATE_VISUAL_REVIEW_2026-07-26.md`](reviews/P4_7_CANDIDATE_VISUAL_REVIEW_2026-07-26.md)。
+   下一步是 P4.7-0B JFR；2024 analytical/multigrid 只在现有 finalist 均失败时恢复。
 5. **P4.7c selection/density integration**：选择满足视觉和性能门禁的最小组合，只对受控
    `REGION_PLANNED` 接入列缓存，完成 volume 与零影响门禁。
 6. **P4.7d preview/parity**：REGION_PLANNED preview 改为同源 runtime，legacy droplet preview 保留。

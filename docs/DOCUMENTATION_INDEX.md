@@ -36,6 +36,7 @@
 | [`P4_7_BOUNDED_FLOW_EROSION_SPEC.md`](P4_7_BOUNDED_FLOW_EROSION_SPEC.md) | P4.7 bounded Priority-Flood、adaptive flow、fixed-step accumulation 与 stream-power dry incision 候选契约 | 候选常量、halo、primitive layout、边界或测量结果改变时更新；不得描述为 P5 hydrology authority |
 | [`P5_3D_HYDROLOGY_ARCHITECTURE_PLAN.md`](P5_3D_HYDROLOGY_ARCHITECTURE_PLAN.md) | `format_version=5` 的 3D 水文 authority、primitive artifact、分域、缓存、河床/水面 profile 和真实水体阶段计划 | 水文契约、阶段顺序或 RTF R10X 对齐结论改变时更新；当前仅规划，未实现 production runtime |
 | [`reviews/P4_7_BASELINE_2026-07-23.md`](reviews/P4_7_BASELINE_2026-07-23.md) | P4.7-0 smoke-profile traversal 的首个可重复观测与限制 | 每次基线观测或门禁范围改变时新增/更新 |
+| [`reviews/P4_7_CANDIDATE_VISUAL_REVIEW_2026-07-26.md`](reviews/P4_7_CANDIDATE_VISUAL_REVIEW_2026-07-26.md) | P4.7 候选的统一 synthetic 同图证据、视觉风险和 finalist 边界 | fixture、色标、候选外观或 P4.7 视觉筛选结论改变时更新；不得替代真实客户端/JFR |
 | [`ETF_TO_RTF_IMPROVEMENT_TRACKER.md`](ETF_TO_RTF_IMPROVEMENT_TRACKER.md) | ETF 中发现、验证并准备人工回送 RTF 的改进事项唯一状态台账 | 每次发现通用改进、RTF 状态变化或完成迁移时更新；不得从 ETF 任务直接修改 RTF |
 | [`TALL_WORLD_OPTIMIZATION_REVIEW.md`](TALL_WORLD_OPTIMIZATION_REVIEW.md) | 高世界、热路径、C2ME 与精确空 cell 优化审查 | 性能架构或基准结论改变时更新 |
 | [`CONTENT_PACK_SPEC.md`](CONTENT_PACK_SPEC.md) | ETF Worldgen Content Pack API v1 当前规格 | Content Pack 契约改变时更新；当前待实现 |

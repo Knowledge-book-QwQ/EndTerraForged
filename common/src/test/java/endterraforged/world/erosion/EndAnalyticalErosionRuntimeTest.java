@@ -152,6 +152,7 @@ class EndAnalyticalErosionRuntimeTest {
         assertEquals(rawTop, output.top(), 0.0F);
         assertEquals(0.0F, output.erosionDelta(), 0.0F);
         assertEquals(0.0F, output.erosionStrength(), 0.0F);
+        assertEquals(0.0F, output.drainagePotential(), 0.0F);
         assertEquals(0.0F, output.activation(), 0.0F);
     }
 }

@@ -431,6 +431,10 @@ tile X/Z 和必要的 Content-independent terrain version。不能使用对象 i
 - RTF hydraulic 已形成必须参与比较的 test-only 高质量候选；只移植数学，不移植架构，尚未获选。
 - Priority-Flood/adaptive-flow/stream-power 已形成 test-only 有界地表候选；其 12-step accumulation 与
   direction 诊断不是长期 hydrology authority，尚未获选。
+- 统一 synthetic visual matrix 已排除 analytical-only 与 thermal-only 作为最终成形方案。hydraulic 暴露
+  高频切削/沉积风险，bounded flow 暴露 D8/轴向规则性；两者继续作为实机 finalist，不能根据 fixture
+  直接组合或宣布胜出。证据见
+  [`reviews/P4_7_CANDIDATE_VISUAL_REVIEW_2026-07-26.md`](reviews/P4_7_CANDIDATE_VISUAL_REVIEW_2026-07-26.md)。
 - 2024 analytical/multigrid 是未激活的研究储备，不占用当前实现队列。
 - thermal/talus 只做有界收尾。
 - GPU、SPH、无界全局缓存和私有 executor 不进入正式 runtime。

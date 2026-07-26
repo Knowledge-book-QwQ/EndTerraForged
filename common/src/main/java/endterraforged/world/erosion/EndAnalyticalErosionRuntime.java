@@ -66,13 +66,13 @@ public final class EndAnalyticalErosionRuntime {
 
         float activation = gateActivation(landness, inlandness, outerActivation,
                 availableThicknessBlocks, archipelagoDominant);
-        float drainagePotential = Math.clamp(curvature * 3.0F + Math.max(0.0F, slope) * 0.20F,
-                0.0F, 1.0F);
         if (activation == 0.0F) {
-            output.set(safeTop, 0.0F, 0.0F, drainagePotential, 0.0F);
+            output.set(safeTop, 0.0F, 0.0F, 0.0F, 0.0F);
             return;
         }
 
+        float drainagePotential = Math.clamp(curvature * 3.0F + Math.max(0.0F, slope) * 0.20F,
+                0.0F, 1.0F);
         float ridgeMask = Math.clamp(-curvature * 3.0F, 0.0F, 1.0F);
         float slopeFactor = Math.clamp(slope, 0.0F, 1.0F);
         float roughnessFactor = 0.35F + 0.65F * Math.clamp(roughness, 0.0F, 1.0F);

@@ -15,17 +15,17 @@ import java.util.concurrent.atomic.LongAdder;
 
 import org.junit.jupiter.api.Test;
 
-class EndHydraulicErosionTileCacheTest {
+class EndBoundedFlowErosionTileCacheTest {
 
     private static final int TILE_COUNT = 4;
 
     @Test
     void outputCacheReportsHitsEvictionsAndOwnerSwaps() {
-        EndErosionTileKey firstKey = EndHydraulicErosionRuntimeTest.key(128, 0, 0);
-        EndHydraulicErosionTileBuilder builder = builder(firstKey, null);
-        EndErosionTileCache<EndHydraulicErosionTile> cache = new EndErosionTileCache<>(2);
+        EndErosionTileKey firstKey = EndBoundedFlowErosionRuntimeTest.key(128, 0, 0);
+        EndBoundedFlowErosionTileBuilder builder = builder(firstKey, null);
+        EndErosionTileCache<EndBoundedFlowErosionTile> cache = new EndErosionTileCache<>(2);
 
-        EndHydraulicErosionTile first = cache.getOrBuild(firstKey, builder);
+        EndBoundedFlowErosionTile first = cache.getOrBuild(firstKey, builder);
         assertSame(first, cache.getOrBuild(firstKey, builder));
         cache.getOrBuild(firstKey.withTile(1, 0), builder);
         cache.getOrBuild(firstKey.withTile(2, 0), builder);
@@ -87,32 +87,36 @@ class EndHydraulicErosionTileCacheTest {
     private static WorkerResult workerRun(EndErosionTileKey[] keys,
                                           int rotation,
                                           BuildLedger ledger) {
-        EndHydraulicErosionTileBuilder builder = builder(keys[0], ledger::record);
-        EndErosionTileCache<EndHydraulicErosionTile> cache = new EndErosionTileCache<>(TILE_COUNT);
+        EndBoundedFlowErosionTileBuilder builder = builder(keys[0], ledger::record);
+        EndErosionTileCache<EndBoundedFlowErosionTile> cache =
+                new EndErosionTileCache<>(TILE_COUNT);
         long checksum = 0L;
         for (int index = 0; index < keys.length; index++) {
-            checksum += cache.getOrBuild(keys[(index + rotation) % keys.length], builder).checksum();
+            checksum += cache.getOrBuild(
+                    keys[(index + rotation) % keys.length], builder).checksum();
         }
         for (int index = keys.length - 1; index >= 0; index--) {
-            checksum += cache.getOrBuild(keys[(index + rotation) % keys.length], builder).checksum();
+            checksum += cache.getOrBuild(
+                    keys[(index + rotation) % keys.length], builder).checksum();
         }
         return new WorkerResult(checksum, cache.metrics());
     }
 
-    private static EndHydraulicErosionTileBuilder builder(
+    private static EndBoundedFlowErosionTileBuilder builder(
             EndErosionTileKey key,
             ErosionWorldFixtureBuilder.BuildObserver observer) {
         ErosionWorldFixtureBuilder input = new ErosionWorldFixtureBuilder(
                 ErosionWorldFixtureBuilder.Kind.LONG_PLANE,
                 64.0F, 64.0F, true, observer);
-        return new EndHydraulicErosionTileBuilder(
-                input, new EndHydraulicErosionRuntime(), key.cellCount());
+        return new EndBoundedFlowErosionTileBuilder(
+                input, new EndBoundedFlowErosionRuntime(), key.cellCount());
     }
 
     private static EndErosionTileKey[] keys() {
         EndErosionTileKey[] keys = new EndErosionTileKey[TILE_COUNT];
         for (int index = 0; index < keys.length; index++) {
-            keys[index] = EndHydraulicErosionRuntimeTest.key(128, index - 2, 3 - index);
+            keys[index] = EndBoundedFlowErosionRuntimeTest.key(
+                    128, index - 2, 3 - index);
         }
         return keys;
     }

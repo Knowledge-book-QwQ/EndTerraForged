@@ -41,7 +41,7 @@ class EndHydraulicErosionRuntimeTest {
 
     @Test
     void flatTerrainIsBitUnchangedAndExportsNoMaterial() {
-        Built built = build(HydraulicWorldFixtureBuilder.Kind.FLAT, 128, 0, 0, true, 64.0F, 64.0F);
+        Built built = build(ErosionWorldFixtureBuilder.Kind.FLAT, 128, 0, 0, true, 64.0F, 64.0F);
         EndHydraulicErosionTile tile = built.output();
 
         forEachCore(tile.key(), index -> {
@@ -58,9 +58,9 @@ class EndHydraulicErosionRuntimeTest {
 
     @Test
     void protectedCoastAndArchipelagoAreStrictlyZeroInfluence() {
-        for (HydraulicWorldFixtureBuilder.Kind kind : EnumSet.of(
-                HydraulicWorldFixtureBuilder.Kind.COAST_THIN_SHELF,
-                HydraulicWorldFixtureBuilder.Kind.ARCHIPELAGO)) {
+        for (ErosionWorldFixtureBuilder.Kind kind : EnumSet.of(
+                ErosionWorldFixtureBuilder.Kind.COAST_THIN_SHELF,
+                ErosionWorldFixtureBuilder.Kind.ARCHIPELAGO)) {
             Built built = build(kind, 128, 0, 0, true, 64.0F, 64.0F);
             forEachCore(built.output().key(), index -> {
                 assertEquals(0, Float.floatToIntBits(built.output().activation(index)));
@@ -73,7 +73,7 @@ class EndHydraulicErosionRuntimeTest {
 
     @Test
     void fixturesStayFiniteWithinTransferBudgetsAndAccountForSediment() {
-        for (HydraulicWorldFixtureBuilder.Kind kind : HydraulicWorldFixtureBuilder.Kind.values()) {
+        for (ErosionWorldFixtureBuilder.Kind kind : ErosionWorldFixtureBuilder.Kind.values()) {
             Built built = build(kind, 128, 0, 0, true, 64.0F, 64.0F);
             EndHydraulicErosionTile output = built.output();
             for (int index = 0; index < output.key().cellCount(); index++) {
@@ -100,9 +100,9 @@ class EndHydraulicErosionRuntimeTest {
 
     @Test
     void ridgeAndPlateauResistanceReduceCutsWithoutChangingSources() {
-        for (HydraulicWorldFixtureBuilder.Kind kind : EnumSet.of(
-                HydraulicWorldFixtureBuilder.Kind.RIDGE,
-                HydraulicWorldFixtureBuilder.Kind.PLATEAU_EDGE)) {
+        for (ErosionWorldFixtureBuilder.Kind kind : EnumSet.of(
+                ErosionWorldFixtureBuilder.Kind.RIDGE,
+                ErosionWorldFixtureBuilder.Kind.PLATEAU_EDGE)) {
             Built protectedTile = build(kind, 128, 0, 0, true, 64.0F, 64.0F);
             Built openTile = build(kind, 128, 0, 0, false, 64.0F, 64.0F);
             float protectedCut = coreCut(protectedTile.output());
@@ -114,11 +114,11 @@ class EndHydraulicErosionRuntimeTest {
 
     @Test
     void basinAndWatershedProduceDrainageSignal() {
-        Built flat = build(HydraulicWorldFixtureBuilder.Kind.FLAT,
+        Built flat = build(ErosionWorldFixtureBuilder.Kind.FLAT,
                 128, 0, 0, true, 64.0F, 64.0F);
-        Built basin = build(HydraulicWorldFixtureBuilder.Kind.CLOSED_BASIN,
+        Built basin = build(ErosionWorldFixtureBuilder.Kind.CLOSED_BASIN,
                 128, 0, 0, true, 64.0F, 64.0F);
-        Built watershed = build(HydraulicWorldFixtureBuilder.Kind.WATERSHED,
+        Built watershed = build(ErosionWorldFixtureBuilder.Kind.WATERSHED,
                 128, 0, 0, true, 64.0F, 64.0F);
 
         assertEquals(0.0F, coreDrainage(flat.output()), 0.0F);
@@ -129,7 +129,7 @@ class EndHydraulicErosionRuntimeTest {
 
     @Test
     void fixedWatershedTileMatchesTheFrozenPrimitiveGolden() {
-        Built watershed = build(HydraulicWorldFixtureBuilder.Kind.WATERSHED,
+        Built watershed = build(ErosionWorldFixtureBuilder.Kind.WATERSHED,
                 128, 0, 0, true, 64.0F, 64.0F);
         assertEquals(4281940154564766763L, watershed.output().checksum());
     }
@@ -144,13 +144,13 @@ class EndHydraulicErosionRuntimeTest {
                                              int largeTileZ,
                                              float centerX,
                                              float centerZ) {
-        Built large = build(HydraulicWorldFixtureBuilder.Kind.WATERSHED,
+        Built large = build(ErosionWorldFixtureBuilder.Kind.WATERSHED,
                 256, largeTileX, largeTileZ, true, centerX, centerZ);
         for (int quadrantZ = 0; quadrantZ < 2; quadrantZ++) {
             for (int quadrantX = 0; quadrantX < 2; quadrantX++) {
                 int smallTileX = largeTileX * 2 + quadrantX;
                 int smallTileZ = largeTileZ * 2 + quadrantZ;
-                Built small = build(HydraulicWorldFixtureBuilder.Kind.WATERSHED,
+                Built small = build(ErosionWorldFixtureBuilder.Kind.WATERSHED,
                         128, smallTileX, smallTileZ, true, centerX, centerZ);
                 compareQuadrant(large.output(), small.output(), quadrantX, quadrantZ);
             }
@@ -193,7 +193,7 @@ class EndHydraulicErosionRuntimeTest {
                 Float.floatToIntBits(right.activation(rightIndex)), position + " activation");
     }
 
-    private static Built build(HydraulicWorldFixtureBuilder.Kind kind,
+    private static Built build(ErosionWorldFixtureBuilder.Kind kind,
                                int coreBlocks,
                                int tileX,
                                int tileZ,
@@ -201,7 +201,7 @@ class EndHydraulicErosionRuntimeTest {
                                float centerX,
                                float centerZ) {
         EndErosionTileKey key = key(coreBlocks, tileX, tileZ);
-        HydraulicWorldFixtureBuilder inputBuilder = new HydraulicWorldFixtureBuilder(
+        ErosionWorldFixtureBuilder inputBuilder = new ErosionWorldFixtureBuilder(
                 kind, centerX, centerZ, protectionEnabled, null);
         EndErosionTile input = inputBuilder.build(key).tile();
         EndHydraulicErosionRuntime runtime = new EndHydraulicErosionRuntime();

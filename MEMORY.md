@@ -387,6 +387,22 @@
 - Priority-Flood 负责 depression/watershed 基础，不能单独产生高质量侵蚀外观；D-infinity/flow accumulation
   和 stream-power 才提供方向与切削。2024 analytical 方法的 2D 扩展仍使用 multigrid iterative process，
   不是逐点闭式函数，必须作为 tile 候选验证。thermal/talus 只做有界收尾。
+- 2026-07-26 完成 test-only bounded flow erosion tile。P4.7 不实现完整 Priority-Flood domain，而只对没有
+  自然下降邻居且非逐位 flat 的 sink candidate 运行 radius-3 minimax query；已有坡面直接保留 source top。
+  这样避免对每格支付 heap 成本，也不会把 local spill 误报为 lake/depression hierarchy。
+- bounded flow 使用 world-space tie rank、strictly descending routing tuple、adaptive D8/top-two split 与
+  12 次同步传播。accumulation 只代表最多 12 条边内的物理 sample area；dominant direction 只是 byte 诊断，
+  不构成 P5 receiver/reach authority。`3 + 12 + 1 = 16` sample halo 已通过一个 256 core 与四个 128 core、
+  正负坐标六通道逐位一致和 receiver 无环测试。
+- bounded flow 只做 stream-power dry incision，不沉积、不发布 sediment/water profile。输出为五个
+  `float[]` 加一个非权威 direction `byte[]`；scratch 为每格 27 primitive bytes 加 1,176-byte fixed flood
+  heap。golden checksum 为 `5601421594159001151L`。
+- hydraulic 与 bounded flow benchmark 已统一到同一 world-space `FLOW_FIELD`。本轮 JDK 21 观测中，
+  hydraulic 128/256 cold p50/p95 范围为 `3.570-4.242/4.156-5.023 ms`、
+  `4.685-5.234/5.152-5.921 ms`；bounded flow 为 `3.950-4.684/5.341-5.717 ms`、
+  `2.286-2.810/2.835-3.362 ms`。bounded flow 128 core artifact/scratch/build peak 为
+  `86,016/111,768/365,720` bytes，16-slot resident `1,376,256` bytes，6-worker 估算 `8,928,792` bytes，
+  cold allocation `254,552 bytes/build`、warm hit `0 bytes`。时间抖动不用于宣告胜出；客户端/JFR 仍是硬门禁。
 - WhiteboxTools、Landlab 和 fastscape 可用于算法/fixture 研究；fastscapelib、RichDEM、TauDEM 和 pysheds
   的 GPL 代码不能复制。SimpleHydrology/SoilMachine/SimpleErosion 未发现许可证，不复制。Immensa 虽为
   MIT 且含 Java Priority-Flood/tile hydrology，但仓库极新、目标 MC 1.21.11 且依赖 ONNX/GPU/大模型，只作

@@ -1,7 +1,7 @@
 package endterraforged.world.erosion;
 
-/** Builds world-space continuous inputs for the hydraulic tile candidate. */
-final class HydraulicWorldFixtureBuilder
+/** Builds world-space continuous inputs shared by P4.7 tile candidates. */
+final class ErosionWorldFixtureBuilder
         implements EndErosionTileCache.Builder<EndErosionTile> {
 
     enum Kind {
@@ -14,7 +14,8 @@ final class HydraulicWorldFixtureBuilder
         CLOSED_BASIN,
         WATERSHED,
         COAST_THIN_SHELF,
-        ARCHIPELAGO
+        ARCHIPELAGO,
+        FLOW_FIELD
     }
 
     @FunctionalInterface
@@ -30,11 +31,11 @@ final class HydraulicWorldFixtureBuilder
     private final boolean protectionEnabled;
     private final BuildObserver observer;
 
-    HydraulicWorldFixtureBuilder(Kind kind, float centerBlockX, float centerBlockZ) {
+    ErosionWorldFixtureBuilder(Kind kind, float centerBlockX, float centerBlockZ) {
         this(kind, centerBlockX, centerBlockZ, true, null);
     }
 
-    HydraulicWorldFixtureBuilder(Kind kind,
+    ErosionWorldFixtureBuilder(Kind kind,
                                  float centerBlockX,
                                  float centerBlockZ,
                                  boolean protectionEnabled,
@@ -118,6 +119,9 @@ final class HydraulicWorldFixtureBuilder
             case WATERSHED -> 0.50F + 0.14F * Math.abs(u) - 0.12F * Math.abs(v);
             case COAST_THIN_SHELF -> 0.44F + 0.18F * smoothStep(-0.28F, 0.10F, u);
             case ARCHIPELAGO -> 0.43F + 0.30F * islandSignal(u, v);
+            case FLOW_FIELD -> 0.52F + 0.08F * u
+                    + 0.035F * (float) Math.sin(u * Math.PI * 18.0F)
+                    + 0.035F * (float) Math.cos(v * Math.PI * 16.0F);
         };
     }
 
@@ -139,6 +143,7 @@ final class HydraulicWorldFixtureBuilder
         return switch (kind) {
             case ISOLATED_SPIKE, RIDGE, WATERSHED -> 0.90F;
             case LONG_PLANE, PLATEAU_EDGE, CLOSED_BASIN -> 0.60F;
+            case FLOW_FIELD -> 0.75F;
             default -> 0.35F;
         };
     }

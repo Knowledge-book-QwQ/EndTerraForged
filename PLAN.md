@@ -15,10 +15,10 @@
 - 2026-07-18 路线校正：RTF 最新地形区架构已经用预览和实机证据否决“RIDGE 拥有完整宏观区域”的 S4.2 语义。P4 的首个生产契约由正权重 `AREA` 地貌组成统一、无空洞的 terrain ownership 分区；`RIDGE` 使用独立、有界 anchor overlay，不能夺取宏观 owner。RTF 最新火山线已有较成熟候选，但 ETF 当前仍因阶段范围和末地语义冻结 `COMPACT`，不将其纳入本轮 ownership。完整结论见 [`docs/reviews/RTF_TERRAIN_REGION_ARCHITECTURE_REVIEW_2026-07-18.md`](docs/reviews/RTF_TERRAIN_REGION_ARCHITECTURE_REVIEW_2026-07-18.md)。
 - P4.6 精确 jar 的新世界和 ETF/RTF/C2ME 客户端验收已闭环。P4.7-0A 自动基线现已覆盖 cache、
   raw/full evaluation、cold/warm、chunk traversal 和当前线程 allocation；P4.7-0B 四组合客户端/JFR
-  由独立实机轨道采集。P4.7b 已完成 bounded thermal 对照和 test-only canonical primitive tile substrate；
-  RTF-derived hydraulic primitive SoA tile 也已完成自动候选门禁。下一步实现 bounded Priority-Flood +
-  adaptive flow + stream-power 对照。在四组合 JFR 和全部实际候选的视觉、peak/duplicate/border 门禁
-  完成前，不得宣布候选胜出、重写 production cache 或接入 `EndDensity`。
+  由独立实机轨道采集。P4.7b 的 bounded thermal、canonical tile substrate、RTF-derived hydraulic
+  SoA tile 与 bounded Priority-Flood/adaptive-flow/stream-power 均已完成 test-only 自动门禁。下一步是
+  同图视觉审查与 P4.7-0B 四组合 JFR；在这些门禁完成前，不得宣布候选胜出、重写 production cache
+  或接入 `EndDensity`。
   2024 analytical/multigrid 暂为研究储备；当前 legacy terrain 只作为迁移与性能基线，不继续投入大段视觉修补。
 - 原版主岛、黑曜石柱、龙战、返回门、网关及外围区域当前冻结，不属于近期修改范围。
 - 内容扩展路线已从 biome-only 升级为 ETF Worldgen Content Pack API；当前仅有规格，没有 loader/runtime。
@@ -429,9 +429,20 @@ surface、structure 与后续 Content Pack 只能消费这些正式信号，禁�
   256 core cold p50 `5.210-8.654 ms`、p95 `6.739-10.428 ms`、output `184,320` bytes、scratch
   `147,456` bytes、build peak `709,632` bytes。128 core cold allocation 为 `250,512 bytes/build`，warm
   hit 为 `0 bytes`。以上是 synthetic test-only 数字，不是 Minecraft/C2ME/JFR 证据。
-- [ ] **P4.7b candidate bake-off**：在同一 substrate 上实现 bounded Priority-Flood + adaptive flow +
-  stream-power 对照，并与 local analytical + thermal、hydraulic tile 使用同一 fixture 比较。2024 multigrid
-  保持研究储备。
+- [x] 2026-07-26 完成 test-only bounded flow erosion tile：radius-3 sink-only minimax Priority-Flood、
+  world-space tie-break、adaptive D8/top-two routing、12-step synchronous physical-area accumulation 与
+  stream-power dry incision 使用固定 16-sample halo。flat、plane、basin、watershed、ridge/plateau、
+  coast/thin shelf、archipelago、receiver 无环、正负坐标 128/256 六通道 bit parity、generic cache 与
+  1/2/4/6 worker 门禁通过；golden checksum 为 `5601421594159001151L`。
+- [x] hydraulic 与 bounded-flow 的 cold/warm benchmark 已统一使用 world-space `FLOW_FIELD` fixture。
+  本轮 JDK 21 观测中，hydraulic 128/256 cold p50/p95 范围为 `3.570-4.242/4.156-5.023 ms` 与
+  `4.685-5.234/5.152-5.921 ms`；bounded-flow 为 `3.950-4.684/5.341-5.717 ms` 与
+  `2.286-2.810/2.835-3.362 ms`。bounded-flow 128 core
+  output/scratch/build peak 为 `86,016/111,768/365,720` bytes，16-slot resident `1,376,256` bytes，
+  6-worker 估算 `8,928,792` bytes，cold allocation `254,552 bytes/build`、warm hit `0 bytes`。
+  时间结果只作同进程候选证据，不是跨硬件阈值或 Minecraft/JFR 结论。
+- [x] **P4.7b candidate bake-off automated slice**：local analytical + thermal、hydraulic tile 与 bounded
+  flow tile 均已完成 test-only 自动门禁；2024 multigrid 保持研究储备。
 - [ ] **P4.7c selection**：以视觉质量、volume safety、首块 p95、内存、分块边界、访问顺序、C2ME 和 JFR
   为同等硬门禁，选择最小组合；未同时通过不得接入正式 `EndDensity`。
 - [ ] **P4.7d production integration**：获选组合只对受控 `REGION_PLANNED` 接入列缓存或 final immutable tile

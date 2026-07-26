@@ -401,7 +401,10 @@ tile X/Z 和必要的 Content-independent terrain version。不能使用对象 i
   cold p50 `5.210-8.654 ms`、p95 `6.739-10.428 ms`、artifact `184,320` bytes、scratch `147,456`
   bytes、build peak `709,632` bytes；128 core cold allocation `250,512 bytes/build`，warm hit `0 bytes`。
   以上不是 Minecraft/C2ME/JFR 证据，也不构成选型结论。
-- Priority-Flood + adaptive flow + stream-power 做 bounded drainage/incision 原型，不发布水文 authority。
+- Priority-Flood + adaptive flow + stream-power 已完成 test-only bounded drainage/incision 原型：只对 sink
+  candidate 做 radius-3 minimax query，随后进行 top-two adaptive routing、12-step accumulation 与 dry
+  incision；不发布水文 authority。完整契约见
+  [`P4_7_BOUNDED_FLOW_EROSION_SPEC.md`](P4_7_BOUNDED_FLOW_EROSION_SPEC.md)。
 - 2024 analytical/multigrid 保留在研究名单；只有以上候选均无法通过质量或性能门禁时才投入实现。
 
 ### P4.7c：选择与正式接入
@@ -426,7 +429,8 @@ tile X/Z 和必要的 Content-independent terrain version。不能使用对象 i
 
 - local analytical 是 baseline，不是默认冠军。
 - RTF hydraulic 已形成必须参与比较的 test-only 高质量候选；只移植数学，不移植架构，尚未获选。
-- Priority-Flood/adaptive-flow/stream-power 是长期排水主线候选，但 P4.7 只验证其有界地表版本。
+- Priority-Flood/adaptive-flow/stream-power 已形成 test-only 有界地表候选；其 12-step accumulation 与
+  direction 诊断不是长期 hydrology authority，尚未获选。
 - 2024 analytical/multigrid 是未激活的研究储备，不占用当前实现队列。
 - thermal/talus 只做有界收尾。
 - GPU、SPH、无界全局缓存和私有 executor 不进入正式 runtime。

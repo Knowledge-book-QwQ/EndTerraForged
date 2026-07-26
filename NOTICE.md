@@ -19,6 +19,9 @@ EndTerraForged 以 LGPL-3.0-or-later 协议开源，详见 `LICENSE`。
   水位或 river cache 耦合的 MIT 纯数学可以直接移植；实际源码进入 ETF 时，必须在对应
   文件保留版权头并在本文件追加具体类与修改说明。
 - 本地 RTF R9.3.6 的 `ArchipelagoPopulator` 大陆架、offshore depth 和海岸过渡只用于 ETF 浮空大陆架语义调研；ETF 不照搬其海洋地形实现。
+- Barnes 等的 Priority-Flood、Tarboton 的 D-infinity flow direction 与 Braun/Willett 的
+  stream-power solver 论文：用于 P4.7 bounded flow erosion 的独立算法实现与测试契约；未复制
+  WhiteboxTools、Landlab、RichDEM、TauDEM、pysheds 或其他第三方仓库源码。
 - YUNG's Better Caves：用于地下洞穴形态与分阶段路线调研；不复制源码。
 - Worley's Caves / Worlium、Alex's Caves、Vanilla 1.18+ caves 与通用 SDF/图网络体素方案：仅用于洞穴体验目标、分层思路和技术路线调研；不复制源码，也不把其 UI 或视觉表现迁入本项目。
 - OpenTerrainGenerator：用于配置驱动地形/洞穴管线调研；不复制源码。
@@ -114,3 +117,9 @@ R9.6 的用户界面设计、布局结构和视觉呈现不会被复制。
   固定 16-sample halo、immutable source path、同步贡献累计、有界体积保护和 generic owner-aware
   cache。该候选尚未接入 `EndDensity`、preview、preset、Codec、Builder 或 UI，也尚未通过
   P4.7-0B 客户端/JFR 选型门禁。
+- `common/src/main/java/endterraforged/world/erosion/EndBoundedFlowErosionRuntime.java`、
+  `EndBoundedFlowErosionScratch.java`、`EndBoundedFlowErosionTile.java` 与
+  `EndBoundedFlowErosionTileBuilder.java` 是根据 Barnes Priority-Flood、Tarboton flow direction 与
+  Braun/Willett stream-power 论文独立编写的 test-only primitive candidate，没有复制第三方实现源码。
+  ETF 将其限制为 radius-3 sink query、12-step adaptive flow、16-sample halo 与 dry incision；输出不构成
+  authoritative receiver/reach/water profile，也未接入 production density、preview、preset 或 UI。

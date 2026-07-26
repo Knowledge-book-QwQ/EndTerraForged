@@ -1,7 +1,7 @@
 # EndTerraForged 文档索引
 
 > 文档状态：当前有效。
-> 最近更新：2026-07-25。
+> 最近更新：2026-07-26。
 > 用途：告诉开发者和后续模型每份文档的权威范围，避免把历史材料当成当前计划。
 
 ## 1. 固定阅读顺序
@@ -33,6 +33,7 @@
 | [`RTF_CORE_REUSE_RESEARCH.md`](RTF_CORE_REUSE_RESEARCH.md) | RTF MIT 大陆、地貌区域、地貌族、形状化特征、群岛与侵蚀复用，以及 ETF 高质量地表重构规格 | RTF 地表复用边界或阶段 B 实现决策改变时更新 |
 | [`P4_7_EROSION_ALGORITHM_RESEARCH.md`](P4_7_EROSION_ALGORITHM_RESEARCH.md) | P4.7 论文、开源仓库、许可证、候选矩阵、统一 benchmark、缓存与 JFR 性能架构 | 算法候选、上游许可/成熟度或 P4.7 选型改变时更新；当前尚未选定正式算法 |
 | [`P4_7_ANALYTICAL_EROSION_SPEC.md`](P4_7_ANALYTICAL_EROSION_SPEC.md) | P4.7 低成本 local analytical baseline 的 runtime API、量纲、零影响边界、缓存、preview 与验收门禁 | baseline 契约改变时更新；test-only runtime 已实现，不代表正式算法已选定或接入 density |
+| [`P4_7_BOUNDED_FLOW_EROSION_SPEC.md`](P4_7_BOUNDED_FLOW_EROSION_SPEC.md) | P4.7 bounded Priority-Flood、adaptive flow、fixed-step accumulation 与 stream-power dry incision 候选契约 | 候选常量、halo、primitive layout、边界或测量结果改变时更新；不得描述为 P5 hydrology authority |
 | [`P5_3D_HYDROLOGY_ARCHITECTURE_PLAN.md`](P5_3D_HYDROLOGY_ARCHITECTURE_PLAN.md) | `format_version=5` 的 3D 水文 authority、primitive artifact、分域、缓存、河床/水面 profile 和真实水体阶段计划 | 水文契约、阶段顺序或 RTF R10X 对齐结论改变时更新；当前仅规划，未实现 production runtime |
 | [`reviews/P4_7_BASELINE_2026-07-23.md`](reviews/P4_7_BASELINE_2026-07-23.md) | P4.7-0 smoke-profile traversal 的首个可重复观测与限制 | 每次基线观测或门禁范围改变时新增/更新 |
 | [`ETF_TO_RTF_IMPROVEMENT_TRACKER.md`](ETF_TO_RTF_IMPROVEMENT_TRACKER.md) | ETF 中发现、验证并准备人工回送 RTF 的改进事项唯一状态台账 | 每次发现通用改进、RTF 状态变化或完成迁移时更新；不得从 ETF 任务直接修改 RTF |

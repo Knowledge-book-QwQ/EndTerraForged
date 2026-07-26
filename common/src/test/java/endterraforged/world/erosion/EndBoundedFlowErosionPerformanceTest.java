@@ -9,13 +9,14 @@ import java.util.Arrays;
 
 import org.junit.jupiter.api.Test;
 
-class EndHydraulicErosionPerformanceTest {
+class EndBoundedFlowErosionPerformanceTest {
 
-    private static final int WARMUP_BUILDS = 4;
-    private static final int COLD_128_BUILDS = 12;
-    private static final int COLD_256_BUILDS = 8;
+    private static final int WARMUP_BUILDS = 3;
+    private static final int COLD_128_BUILDS = 8;
+    private static final int COLD_256_BUILDS = 5;
     private static final int WARM_HITS = 256;
     private static final int CACHE_SLOTS = 16;
+    private static final long FLOOD_SCRATCH_BYTES = 1_176L;
 
     @Test
     void records128And256ColdWarmLatencyAndPrimitiveBudgets() {
@@ -24,51 +25,54 @@ class EndHydraulicErosionPerformanceTest {
 
         assertTrue(core128.checksum() != 0L);
         assertTrue(core256.checksum() != 0L);
-        assertEquals(77L * core128.cells(), core128.peakBuildPrimitiveBytes());
-        assertEquals(77L * core256.cells(), core256.peakBuildPrimitiveBytes());
-        assertEquals(20L * core128.cells(), core128.outputPrimitiveBytes());
-        assertEquals(20L * core256.cells(), core256.outputPrimitiveBytes());
-        assertEquals(16L * core128.cells(), core128.scratchPrimitiveBytes());
-        assertEquals(16L * core256.cells(), core256.scratchPrimitiveBytes());
+        assertEquals(89L * core128.cells() + FLOOD_SCRATCH_BYTES,
+                core128.peakBuildPrimitiveBytes());
+        assertEquals(89L * core256.cells() + FLOOD_SCRATCH_BYTES,
+                core256.peakBuildPrimitiveBytes());
+        assertEquals(21L * core128.cells(), core128.outputPrimitiveBytes());
+        assertEquals(21L * core256.cells(), core256.outputPrimitiveBytes());
+        assertEquals(27L * core128.cells() + FLOOD_SCRATCH_BYTES,
+                core128.scratchPrimitiveBytes());
+        assertEquals(27L * core256.cells() + FLOOD_SCRATCH_BYTES,
+                core256.scratchPrimitiveBytes());
 
         long sixWorkerBudget = 6L * (core128.peakResidentPrimitiveBytes()
                 + core128.scratchPrimitiveBytes() + core128.runtimePrimitiveBytes());
         System.out.printf(
-                "[perf] p47Hydraulic core128 cold p50/p95 %.3f/%.3f ms; "
+                "[perf] p47BoundedFlow core128 cold p50/p95 %.3f/%.3f ms; "
                         + "warm p50/p95 %.1f/%.1f ns; output %,d, scratch %,d, "
                         + "build peak %,d, 16-slot resident %,d, 6-worker estimate %,d bytes; "
-                        + "droplets %,d, steps %,d, brush writes %,d, core/halo %,d/%,d, "
-                        + "stops stationary/boundary/lifetime %,d/%,d/%,d, "
-                        + "mass eroded/deposited/exported %.3f/%.3f/%.3f; checksum %d%n",
+                        + "queries %,d, heap push/pop %,d/%,d, routed/split %,d/%,d, "
+                        + "transfers %,d, incision %,d, terminal/truncated %.1f/%.1f, "
+                        + "cut %.3f, max spill %.3f; checksum %d%n",
                 core128.coldP50Nanos() / 1_000_000.0D,
                 core128.coldP95Nanos() / 1_000_000.0D,
-                (double) core128.warmP50Nanos(),
-                (double) core128.warmP95Nanos(),
+                (double) core128.warmP50Nanos(), (double) core128.warmP95Nanos(),
                 core128.outputPrimitiveBytes(), core128.scratchPrimitiveBytes(),
                 core128.peakBuildPrimitiveBytes(), core128.peakResidentPrimitiveBytes(),
-                sixWorkerBudget, core128.stats().droplets(), core128.stats().steps(),
-                core128.stats().brushWrites(), core128.stats().coreSteps(),
-                core128.stats().haloSteps(), core128.stats().stationaryStops(),
-                core128.stats().boundaryStops(), core128.stats().lifetimeStops(),
-                core128.stats().erodedBlocks(), core128.stats().depositedBlocks(),
-                core128.stats().exportedSedimentBlocks(),
-                core128.checksum());
+                sixWorkerBudget, core128.stats().priorityQueries(),
+                core128.stats().heapPushes(), core128.stats().heapPops(),
+                core128.stats().routedCells(), core128.stats().splitCells(),
+                core128.stats().flowTransfers(), core128.stats().incisionCells(),
+                core128.stats().terminalExportArea(), core128.stats().truncatedArea(),
+                core128.stats().totalCutBlocks(),
+                core128.stats().maximumSpillDepthBlocks(), core128.checksum());
         System.out.printf(
-                "[perf] p47Hydraulic core256 cold p50/p95 %.3f/%.3f ms; "
-                        + "output %,d, scratch %,d, build peak %,d; droplets %,d, steps %,d, "
-                        + "brush writes %,d, core/halo %,d/%,d, "
-                        + "stops stationary/boundary/lifetime %,d/%,d/%,d, "
-                        + "mass eroded/deposited/exported %.3f/%.3f/%.3f; checksum %d%n",
+                "[perf] p47BoundedFlow core256 cold p50/p95 %.3f/%.3f ms; "
+                        + "output %,d, scratch %,d, build peak %,d; queries %,d, "
+                        + "heap push/pop %,d/%,d, routed/split %,d/%,d, transfers %,d, "
+                        + "incision %,d, terminal/truncated %.1f/%.1f, cut %.3f, "
+                        + "max spill %.3f; checksum %d%n",
                 core256.coldP50Nanos() / 1_000_000.0D,
                 core256.coldP95Nanos() / 1_000_000.0D,
                 core256.outputPrimitiveBytes(), core256.scratchPrimitiveBytes(),
-                core256.peakBuildPrimitiveBytes(), core256.stats().droplets(),
-                core256.stats().steps(), core256.stats().brushWrites(),
-                core256.stats().coreSteps(), core256.stats().haloSteps(),
-                core256.stats().stationaryStops(), core256.stats().boundaryStops(),
-                core256.stats().lifetimeStops(), core256.stats().erodedBlocks(),
-                core256.stats().depositedBlocks(),
-                core256.stats().exportedSedimentBlocks(), core256.checksum());
+                core256.peakBuildPrimitiveBytes(), core256.stats().priorityQueries(),
+                core256.stats().heapPushes(), core256.stats().heapPops(),
+                core256.stats().routedCells(), core256.stats().splitCells(),
+                core256.stats().flowTransfers(), core256.stats().incisionCells(),
+                core256.stats().terminalExportArea(), core256.stats().truncatedArea(),
+                core256.stats().totalCutBlocks(),
+                core256.stats().maximumSpillDepthBlocks(), core256.checksum());
     }
 
     @Test
@@ -92,9 +96,9 @@ class EndHydraulicErosionPerformanceTest {
         }
 
         try {
-            EndErosionTileKey key = EndHydraulicErosionRuntimeTest.key(128, 0, 0);
-            EndHydraulicErosionRuntime runtime = new EndHydraulicErosionRuntime();
-            EndHydraulicErosionTileBuilder builder = builder(key, runtime);
+            EndErosionTileKey key = EndBoundedFlowErosionRuntimeTest.key(128, 0, 0);
+            EndBoundedFlowErosionRuntime runtime = new EndBoundedFlowErosionRuntime();
+            EndBoundedFlowErosionTileBuilder builder = builder(key, runtime);
             for (int index = 0; index < WARMUP_BUILDS; index++) {
                 builder.build(key);
             }
@@ -107,8 +111,8 @@ class EndHydraulicErosionPerformanceTest {
             }
             long coldBytes = allocationBean.getThreadAllocatedBytes(threadId) - beforeCold;
 
-            EndErosionTileCache<EndHydraulicErosionTile> cache = new EndErosionTileCache<>(1);
-            EndHydraulicErosionTile cached = cache.getOrBuild(key, builder);
+            EndErosionTileCache<EndBoundedFlowErosionTile> cache = new EndErosionTileCache<>(1);
+            EndBoundedFlowErosionTile cached = cache.getOrBuild(key, builder);
             long beforeWarm = allocationBean.getThreadAllocatedBytes(threadId);
             for (int index = 0; index < WARM_HITS; index++) {
                 checksum += cache.getOrBuild(key, builder).checksum();
@@ -120,7 +124,7 @@ class EndHydraulicErosionPerformanceTest {
             assertTrue(warmBytes >= 0L);
             assertEquals(cached.primitiveBytes(), cache.metrics().peakResidentPrimitiveBytes());
             System.out.printf(
-                    "[perf] p47HydraulicAllocation core128 cold %,d bytes/build; "
+                    "[perf] p47BoundedFlowAllocation core128 cold %,d bytes/build; "
                             + "warm %.3f bytes/hit%n",
                     coldBytes / COLD_128_BUILDS, warmBytes / (double) WARM_HITS);
         } finally {
@@ -131,20 +135,20 @@ class EndHydraulicErosionPerformanceTest {
     }
 
     private static Observation observe(int coreBlocks, int coldBuilds) {
-        EndErosionTileKey template = EndHydraulicErosionRuntimeTest.key(coreBlocks, 0, 0);
-        EndHydraulicErosionRuntime runtime = new EndHydraulicErosionRuntime();
-        EndHydraulicErosionTileBuilder builder = builder(template, runtime);
+        EndErosionTileKey template = EndBoundedFlowErosionRuntimeTest.key(coreBlocks, 0, 0);
+        EndBoundedFlowErosionRuntime runtime = new EndBoundedFlowErosionRuntime();
+        EndBoundedFlowErosionTileBuilder builder = builder(template, runtime);
         for (int index = 0; index < WARMUP_BUILDS; index++) {
             builder.build(template);
         }
 
         long[] coldNanos = new long[coldBuilds];
-        EndHydraulicErosionTile last = null;
+        EndBoundedFlowErosionTile last = null;
         long checksum = 0L;
         long peakBuild = 0L;
         for (int index = 0; index < coldNanos.length; index++) {
             long start = System.nanoTime();
-            EndErosionTileCache.BuildResult<EndHydraulicErosionTile> result =
+            EndErosionTileCache.BuildResult<EndBoundedFlowErosionTile> result =
                     builder.build(template);
             coldNanos[index] = System.nanoTime() - start;
             last = result.tile();
@@ -152,7 +156,7 @@ class EndHydraulicErosionPerformanceTest {
             checksum += last.checksum();
         }
 
-        EndErosionTileCache<EndHydraulicErosionTile> cache =
+        EndErosionTileCache<EndBoundedFlowErosionTile> cache =
                 new EndErosionTileCache<>(CACHE_SLOTS);
         EndErosionTileKey[] keys = new EndErosionTileKey[CACHE_SLOTS];
         for (int index = 0; index < keys.length; index++) {
@@ -162,7 +166,7 @@ class EndHydraulicErosionPerformanceTest {
         long[] warmNanos = new long[WARM_HITS];
         for (int index = 0; index < warmNanos.length; index++) {
             long start = System.nanoTime();
-            EndHydraulicErosionTile tile = cache.getOrBuild(keys[index & 15], builder);
+            EndBoundedFlowErosionTile tile = cache.getOrBuild(keys[index & 15], builder);
             warmNanos[index] = System.nanoTime() - start;
             checksum += tile.checksum();
         }
@@ -177,12 +181,12 @@ class EndHydraulicErosionPerformanceTest {
                 cache.metrics().peakResidentPrimitiveBytes(), last.stats(), checksum);
     }
 
-    private static EndHydraulicErosionTileBuilder builder(
+    private static EndBoundedFlowErosionTileBuilder builder(
             EndErosionTileKey key,
-            EndHydraulicErosionRuntime runtime) {
+            EndBoundedFlowErosionRuntime runtime) {
         ErosionWorldFixtureBuilder input = new ErosionWorldFixtureBuilder(
                 ErosionWorldFixtureBuilder.Kind.FLOW_FIELD, 128.0F, 128.0F);
-        return new EndHydraulicErosionTileBuilder(input, runtime, key.cellCount());
+        return new EndBoundedFlowErosionTileBuilder(input, runtime, key.cellCount());
     }
 
     private static long percentile(long[] sorted, double percentile) {
@@ -200,7 +204,7 @@ class EndHydraulicErosionPerformanceTest {
                                long runtimePrimitiveBytes,
                                long peakBuildPrimitiveBytes,
                                long peakResidentPrimitiveBytes,
-                               EndHydraulicErosionTile.Stats stats,
+                               EndBoundedFlowErosionTile.Stats stats,
                                long checksum) {
     }
 }

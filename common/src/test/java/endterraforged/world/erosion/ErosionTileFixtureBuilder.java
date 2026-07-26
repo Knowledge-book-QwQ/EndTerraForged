@@ -1,7 +1,7 @@
 package endterraforged.world.erosion;
 
 /** Builds canonical tile artifacts from the shared P4.7 synthetic fixture. */
-final class ErosionTileFixtureBuilder implements EndErosionTileCache.Builder {
+final class ErosionTileFixtureBuilder implements EndErosionTileCache.Builder<EndErosionTile> {
 
     @FunctionalInterface
     interface BuildObserver {
@@ -21,7 +21,7 @@ final class ErosionTileFixtureBuilder implements EndErosionTileCache.Builder {
     }
 
     @Override
-    public EndErosionTileCache.BuildResult build(EndErosionTileKey key) {
+    public EndErosionTileCache.BuildResult<EndErosionTile> build(EndErosionTileKey key) {
         validateGeometry(key);
         int cells = key.cellCount();
         float[] sourceTopBlocks = new float[cells];
@@ -64,7 +64,7 @@ final class ErosionTileFixtureBuilder implements EndErosionTileCache.Builder {
         if (this.observer != null) {
             this.observer.built(key);
         }
-        return new EndErosionTileCache.BuildResult(tile, tile.primitiveBytes());
+        return new EndErosionTileCache.BuildResult<>(tile, tile.primitiveBytes());
     }
 
     private void validateGeometry(EndErosionTileKey key) {

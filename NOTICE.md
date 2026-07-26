@@ -104,3 +104,13 @@ R9.6 的用户界面设计、布局结构和视觉呈现不会被复制。
   `sizeNoise`、`densityNoise`、smoothstep 阈值和离岸衰减的数学语义；删除 `Cell`、
   `GeneratorContext`、water/biome/terrain 写入、river cache 与客户端依赖。ETF 新增
   中央末地保护、有限 landmass volume、caller-owned signal buffer 和末地化 coast gate。
+- `common/src/main/java/endterraforged/world/erosion/EndHydraulicErosionRuntime.java`、
+  `EndHydraulicErosionScratch.java`、`EndHydraulicErosionTile.java` 与
+  `EndHydraulicErosionTileBuilder.java` 改写自 ReTerraForged R9.3.6/R9.6 的 droplet
+  `Erosion` 数学。保留 gradient、inertia、capacity、erosion/deposition、gravity、evaporation、
+  brush、`FastRandom` 调用顺序与 `12768` seed salt；删除 `Cell[]`、每格 brush 数组、对象池、
+  `GeneratorContext`、worldgen executor、scheduled cache、水位、biome 与 river cache 耦合。
+  ETF 改为 test-only immutable runtime、worker-owned primitive SoA scratch、全局 sample 坐标、
+  固定 16-sample halo、immutable source path、同步贡献累计、有界体积保护和 generic owner-aware
+  cache。该候选尚未接入 `EndDensity`、preview、preset、Codec、Builder 或 UI，也尚未通过
+  P4.7-0B 客户端/JFR 选型门禁。

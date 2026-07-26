@@ -27,16 +27,16 @@ class EndErosionTileSubstratePerformanceTest {
 
         long[] coldNanos = new long[MEASURE_BUILDS];
         long checksum = 0L;
-        EndErosionTileCache coldCache = null;
+        EndErosionTileCache<EndErosionTile> coldCache = null;
         for (int index = 0; index < coldNanos.length; index++) {
-            coldCache = new EndErosionTileCache(1);
+            coldCache = new EndErosionTileCache<>(1);
             long start = System.nanoTime();
             EndErosionTile tile = coldCache.getOrBuild(KEYS[index & 15], builder);
             coldNanos[index] = System.nanoTime() - start;
             checksum += tile.checksum();
         }
 
-        EndErosionTileCache warmCache = new EndErosionTileCache(KEYS.length);
+        EndErosionTileCache<EndErosionTile> warmCache = new EndErosionTileCache<>(KEYS.length);
         for (EndErosionTileKey key : KEYS) {
             warmCache.getOrBuild(key, builder);
         }
@@ -100,7 +100,7 @@ class EndErosionTileSubstratePerformanceTest {
             }
             long coldBytes = allocationBean.getThreadAllocatedBytes(threadId) - beforeCold;
 
-            EndErosionTileCache cache = new EndErosionTileCache(KEYS.length);
+            EndErosionTileCache<EndErosionTile> cache = new EndErosionTileCache<>(KEYS.length);
             for (EndErosionTileKey key : KEYS) {
                 cache.getOrBuild(key, builder);
             }

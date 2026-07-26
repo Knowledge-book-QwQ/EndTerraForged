@@ -364,6 +364,22 @@
   `1.7/5.9-12.5 us`、input tile `44,649` primitive bytes、16-slot peak resident `714,384` bytes、cold
   `44,960 bytes/build` 和 warm `0 bytes/hit`。这些数字只描述输入 artifact 与 harness cache，不能冒充
   hydraulic/flow candidate peak、border、Minecraft、C2ME 或 JFR 结果。
+- 2026-07-26 完成 test-only RTF-derived hydraulic SoA tile。RTF R9.3.6、R9.6 与当前只读分支的
+  droplet 核心一致；ETF 冻结其 gradient、inertia、capacity、erosion/deposition、gravity、evaporation、
+  brush、iteration seed、packed source-chunk seed、`FastRandom` 与 X/Z 调用顺序，但删除 `Cell[]`、每格
+  brush 数组、对象池、executor 和全局 cache。高度单位固定为 256 blocks，避免 world height 改变物理切削深度。
+- hydraulic tile 的连续性决策是：droplet 路径只读 immutable source top，侵蚀、沉积和 flux 同步累计；
+  source、插值位置与分区全部使用全局 sample 坐标。局部 float 坐标会让 128/256 tile 因 ULP 差异失去
+  bit parity；跨 droplet 共享可变预算会让 tile 外 droplet 通过 halo 改变后续 sediment，因此预算只在发布
+  单元格时统一限幅。四个 128 core 与一个 256 core 的重叠正负世界坐标五通道现已逐位一致。
+- hydraulic 输出只发布 final top、signed delta、erosion strength、drainage potential 与 activation 五个
+  `float[]`，不伪造 sediment/water profile。本轮多次 JDK 21 synthetic 观测中，128 core cold p50
+  `4.404-5.626 ms`、p95 `5.375-22.903 ms`，warm p50 `0.8-2.7 us`、p95 `3.3-19.2 us`；artifact
+  `81,920` bytes、scratch `65,536` bytes、build peak `315,392` bytes、16-slot resident `1,310,720`
+  bytes、6-worker 估算 `8,260,776` bytes。256 core cold p50 `5.210-8.654 ms`、p95
+  `6.739-10.428 ms`、artifact `184,320` bytes、scratch `147,456` bytes、build peak `709,632` bytes。
+  128 core cold allocation 为 `250,512 bytes/build`，warm hit 为 `0 bytes`。
+  这些只证明 synthetic fixture、缓存和边界契约，不是 Minecraft/C2ME/JFR 或正式算法胜出证据。
 - RTF droplet 可移植 gradient、inertia、capacity、erosion/deposition、evaporation 与 filter 顺序，但不能
   搬入 `Cell[]`、per-cell `int[][]/float[][]` brush、单尺寸 `WorldErosion`、私有 worldgen executor、对象池
   或 scheduled cache。ETF 候选使用 primitive SoA、canonical world-space tile/source、fixed halo 和有界

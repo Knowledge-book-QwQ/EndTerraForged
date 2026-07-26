@@ -28,9 +28,10 @@ raw top + ownership/thickness/protection masks
 1. 先修正 profile 导数量纲并建立 P4.6 性能基线、缓存指标和统一 tile benchmark。2026-07-25
    已完成现有 production density 的自动基线；四组合客户端/JFR 继续作为独立实机轨道。
 2. 保留现有五点 analytical 作为低成本 baseline 和明确 fallback，不预先宣布它是最终算法。
-3. 对 bounded thermal、RTF-derived hydraulic primitive tile、Priority-Flood + flow accumulation +
-   stream-power 三条候选做同图对比。2024 analytical/multigrid 因缺少成熟、可验证的 Java 21/Minecraft
-   实现保留为研究储备，只有前三条均无法达标时才恢复。
+3. bounded thermal 与 RTF-derived hydraulic primitive tile 已完成 test-only 自动候选门禁；下一步在
+   同一 substrate 上实现 Priority-Flood + adaptive flow + stream-power，并做同图对比。2024
+   analytical/multigrid 因缺少成熟、可验证的 Java 21/Minecraft 实现保留为研究储备，只有前三条均无法
+   达标时才恢复。
 4. 只有候选同时通过视觉、边界、访问顺序、C2ME、首块延迟、内存和 JFR 门禁，才接入
    `EndDensity` 的正式列刷新。
 
@@ -391,8 +392,15 @@ tile X/Z 和必要的 Content-independent terrain version。不能使用对象 i
 - canonical primitive tile substrate 已完成 stable key、immutable SoA input、worker-owned bounded cache、
   owner/eviction、failed-build、cold/warm、allocation、duplicate build 和 1/2/4/6 worker checksum 门禁。
   input tile 为 `44,649` primitive bytes；这些 substrate 数字不能冒充候选算法 peak。
-- 下一步将 RTF droplet 改写为 primitive SoA tile，并记录其独立 scratch、artifact peak、duplicate build、
-  border bits 与 cold/warm 指标。
+- RTF droplet 已改写为 test-only primitive SoA tile：固定 256-block reference height、16-sample halo、
+  immutable source path 和全局 sample 坐标；输出固定为五个 `float[]`，不发布 sediment/water profile。
+  128/256 core、正负坐标、边界 bits、owner/eviction、1/2/4/6 worker checksum 与 duplicate build 门禁通过。
+  本轮多次 JDK 21 synthetic 观测中，128 core cold p50 `4.404-5.626 ms`、p95 `5.375-22.903 ms`，
+  warm p50 `0.8-2.7 us`、p95 `3.3-19.2 us`；artifact `81,920` bytes、scratch `65,536` bytes、build
+  peak `315,392` bytes、16-slot resident `1,310,720` bytes、6-worker 估算 `8,260,776` bytes。256 core
+  cold p50 `5.210-8.654 ms`、p95 `6.739-10.428 ms`、artifact `184,320` bytes、scratch `147,456`
+  bytes、build peak `709,632` bytes；128 core cold allocation `250,512 bytes/build`，warm hit `0 bytes`。
+  以上不是 Minecraft/C2ME/JFR 证据，也不构成选型结论。
 - Priority-Flood + adaptive flow + stream-power 做 bounded drainage/incision 原型，不发布水文 authority。
 - 2024 analytical/multigrid 保留在研究名单；只有以上候选均无法通过质量或性能门禁时才投入实现。
 
@@ -417,7 +425,7 @@ tile X/Z 和必要的 Content-independent terrain version。不能使用对象 i
 当前不冻结某一个正式侵蚀算法。冻结的是评选规则和实现边界：
 
 - local analytical 是 baseline，不是默认冠军。
-- RTF hydraulic 是必须参与比较的高质量候选，但只移植数学，不移植架构。
+- RTF hydraulic 已形成必须参与比较的 test-only 高质量候选；只移植数学，不移植架构，尚未获选。
 - Priority-Flood/adaptive-flow/stream-power 是长期排水主线候选，但 P4.7 只验证其有界地表版本。
 - 2024 analytical/multigrid 是未激活的研究储备，不占用当前实现队列。
 - thermal/talus 只做有界收尾。

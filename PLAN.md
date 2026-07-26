@@ -16,8 +16,9 @@
 - P4.6 精确 jar 的新世界和 ETF/RTF/C2ME 客户端验收已闭环。P4.7-0A 自动基线现已覆盖 cache、
   raw/full evaluation、cold/warm、chunk traversal 和当前线程 allocation；P4.7-0B 四组合客户端/JFR
   由独立实机轨道采集。P4.7b 已完成 bounded thermal 对照和 test-only canonical primitive tile substrate；
-  下一步实现第一种真实 tile 算法 RTF-derived hydraulic primitive SoA。在四组合 JFR 和每种实际候选的
-  peak/duplicate/border 门禁完成前，不得宣布候选胜出、重写 production cache 或接入 `EndDensity`。
+  RTF-derived hydraulic primitive SoA tile 也已完成自动候选门禁。下一步实现 bounded Priority-Flood +
+  adaptive flow + stream-power 对照。在四组合 JFR 和全部实际候选的视觉、peak/duplicate/border 门禁
+  完成前，不得宣布候选胜出、重写 production cache 或接入 `EndDensity`。
   2024 analytical/multigrid 暂为研究储备；当前 legacy terrain 只作为迁移与性能基线，不继续投入大段视觉修补。
 - 原版主岛、黑曜石柱、龙战、返回门、网关及外围区域当前冻结，不属于近期修改范围。
 - 内容扩展路线已从 biome-only 升级为 ETF Worldgen Content Pack API；当前仅有规格，没有 loader/runtime。
@@ -418,9 +419,19 @@ surface、structure 与后续 Content Pack 只能消费这些正式信号，禁�
   分别为 `0/4/12/20`。本机 substrate-only 观测为 cold p50/p95 `0.032-0.050/0.217-0.314 ms`、warm
   p50/p95 `1.7/5.9-12.5 us`、input tile `44,649` primitive bytes、16-slot peak resident `714,384` bytes、
   cold `44,960 bytes/build`、warm `0 bytes/hit`。这些不是 hydraulic/flow 候选成本。
-- [ ] **P4.7b candidate bake-off**：下一步在同一 substrate 上实现 RTF-derived hydraulic primitive SoA tile，
-  记录真实 scratch/peak/duplicate/border/cold-warm 指标；随后实现 Priority-Flood + adaptive flow + stream-power
-  对照。2024 multigrid 保持研究储备。
+- [x] 2026-07-26 完成 test-only RTF-derived hydraulic primitive SoA tile：冻结 R9.3.6/R9.6 droplet
+  常量、gradient、brush、seed packing、`FastRandom` 与 golden fixture；使用 256-block reference height、
+  16-sample halo、全局 sample 坐标和 immutable source path。flat、ridge/plateau、basin/watershed、
+  coast/thin shelf、archipelago、质量统计、正负坐标与 128/256 core 逐位一致门禁通过。128 core 本轮 cold
+  p50 `4.404-5.626 ms`、p95 `5.375-22.903 ms`，warm p50 `0.8-2.7 us`、p95 `3.3-19.2 us`；
+  output `81,920` bytes、scratch `65,536` bytes、
+  build peak `315,392` bytes、16-slot resident `1,310,720` bytes、6-worker 估算 `8,260,776` bytes；
+  256 core cold p50 `5.210-8.654 ms`、p95 `6.739-10.428 ms`、output `184,320` bytes、scratch
+  `147,456` bytes、build peak `709,632` bytes。128 core cold allocation 为 `250,512 bytes/build`，warm
+  hit 为 `0 bytes`。以上是 synthetic test-only 数字，不是 Minecraft/C2ME/JFR 证据。
+- [ ] **P4.7b candidate bake-off**：在同一 substrate 上实现 bounded Priority-Flood + adaptive flow +
+  stream-power 对照，并与 local analytical + thermal、hydraulic tile 使用同一 fixture 比较。2024 multigrid
+  保持研究储备。
 - [ ] **P4.7c selection**：以视觉质量、volume safety、首块 p95、内存、分块边界、访问顺序、C2ME 和 JFR
   为同等硬门禁，选择最小组合；未同时通过不得接入正式 `EndDensity`。
 - [ ] **P4.7d production integration**：获选组合只对受控 `REGION_PLANNED` 接入列缓存或 final immutable tile

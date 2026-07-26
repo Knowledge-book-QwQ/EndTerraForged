@@ -219,6 +219,37 @@ harness cache peak resident 为 `714,384` bytes；本机两次 common 测试记�
 `0 bytes/hit`。4 个共享 key 的 1/2/4/6 worker duplicate builds 为 `0/4/12/20`，checksum 相同。以上仍是
 substrate-only 证据，不包含任何 hydraulic、routing、incision、border output 或 production cache 成本。
 
+## 8.3 RTF-derived hydraulic SoA tile 契约
+
+2026-07-26 已完成第一种实际 tile 候选，仍只用于测试和 benchmark：
+
+- runtime immutable、线程安全；builder 与四个 `float[]` scratch 由 worker 独占，输出 artifact 为五个
+  `float[]`：final top、signed delta、erosion strength、drainage potential 与 activation。
+- 固定 RTF R9.3.6/R9.6 的 135 droplets/source chunk、lifetime 12、water/speed `0.7`、erosion/deposition
+  `0.5`、inertia `0.05`、gradient weight `0.95`、capacity `4.0/0.01`、gravity `3.0`、evaporation
+  `0.01` 与 radius-4 brush；reference height 固定为 256 blocks。
+- halo 固定为 `lifetime + brushRadius = 16` samples。128/256 block core 分别形成 64 x 64 与 96 x 96
+  sample tile；droplet source、插值位置和 `floorDiv` 分区使用全局 sample 坐标。
+- droplet path 只读取 immutable source top；侵蚀、沉积和 flux 同步累计，单元格最终 cut/fill 在发布时按
+  activation、`1 - erosionResistance`、12-block 上限与 thickness budget 统一限幅。该设计避免共享可变
+  预算把 tile 外 droplet 顺序传播到重叠 core。
+- 中央保护、void、无 AREA owner、低 landness、薄 shelf、保护 mask 与 archipelago-dominant 单元严格
+  零影响；输出不伪造 sediment 或 water profile。
+
+自动门禁已覆盖 frozen constants/RNG/golden、flat、ridge、plateau、basin、watershed、coast/thin shelf、
+archipelago、finite/budget、sediment transport accounting、正负坐标、一个 256 core 与四个 128 core 的
+五通道逐位一致，以及 generic cache 的 owner swap、eviction、failed build、request order、1/2/4/6 worker
+checksum 和 duplicate builds。固定 watershed checksum 为 `4281940154564766763L`。
+
+本轮多次 JDK 21 synthetic 测量：128 core cold p50 `4.404-5.626 ms`、p95 `5.375-22.903 ms`，warm
+p50 `0.8-2.7 us`、p95 `3.3-19.2 us`；output `81,920` bytes、scratch `65,536` bytes、build peak
+`315,392` bytes、16-slot resident `1,310,720` bytes、6-worker 估算 `8,260,776` bytes。256 core cold
+p50 `5.210-8.654 ms`、p95 `6.739-10.428 ms`、output `184,320` bytes、scratch `147,456` bytes、build
+peak `709,632` bytes。128 core cold allocation 为 `250,512 bytes/build`，warm hit 为 `0 bytes`；固定
+workload 为 2,027/4,633 droplets、22,556/52,819 steps、977,936/2,323,187 brush writes，core/halo
+steps 为 6,468/16,088 与 25,645/27,174，stationary/boundary/lifetime stops 为 `0/376/1651` 与
+`0/539/4094`。该结果不设置跨硬件阈值，不替代客户端、C2ME 或 JFR。
+
 ## 9. 接入与缓存
 
 最终获选算法的正式接入点是 `EndDensity.ColumnCache.refresh()` 所消费的 heightmap top 路径：
@@ -272,9 +303,9 @@ baseline 与候选台至少覆盖：
    JFR。它可与 test-only candidate 编码并行，但 selection 和 production integration 必须等待其闭环。
 3. **P4.7a local analytical baseline**：修正导数量纲，新增 immutable analytical runtime 与
    caller-owned output，只跑纯单元测试和统一 fixture，不接正式 top。
-4. **P4.7b candidate bake-off**：先完成 bounded thermal 对照，再建立 test-only canonical tile substrate
-   与 peak/duplicate instrumentation，并以同一 primitive input artifact 比较 RTF-derived hydraulic SoA
-   tile 与 Priority-Flood + adaptive flow + stream-power。2024 analytical/multigrid 只在这些候选均失败时恢复。
+4. **P4.7b candidate bake-off**：bounded thermal、canonical tile substrate 与 RTF-derived hydraulic SoA
+   tile 已完成；下一步以同一 primitive input artifact 实现 Priority-Flood + adaptive flow + stream-power。
+   2024 analytical/multigrid 只在这些候选均失败时恢复。
 5. **P4.7c selection/density integration**：选择满足视觉和性能门禁的最小组合，只对受控
    `REGION_PLANNED` 接入列缓存，完成 volume 与零影响门禁。
 6. **P4.7d preview/parity**：REGION_PLANNED preview 改为同源 runtime，legacy droplet preview 保留。

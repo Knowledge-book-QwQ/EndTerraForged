@@ -10,14 +10,14 @@ import java.util.Objects;
  * single-flight or executor; duplicate builds across workers remain visible to
  * the benchmark.</p>
  */
-final class EndErosionTileCache {
+final class EndErosionTileCache<T extends EndErosionTileArtifact> {
 
     @FunctionalInterface
-    interface Builder {
-        BuildResult build(EndErosionTileKey key);
+    interface Builder<T extends EndErosionTileArtifact> {
+        BuildResult<T> build(EndErosionTileKey key);
     }
 
-    record BuildResult(EndErosionTile tile, long peakPrimitiveBytes) {
+    record BuildResult<T extends EndErosionTileArtifact>(T tile, long peakPrimitiveBytes) {
         BuildResult {
             Objects.requireNonNull(tile, "tile");
             if (peakPrimitiveBytes < tile.primitiveBytes()) {
@@ -39,7 +39,7 @@ final class EndErosionTileCache {
     }
 
     private final EndErosionTileKey[] keys;
-    private final EndErosionTile[] tiles;
+    private final EndErosionTileArtifact[] tiles;
     private final long[] lastAccess;
 
     private boolean ownerSet;
@@ -61,11 +61,12 @@ final class EndErosionTileCache {
             throw new IllegalArgumentException("capacity must be > 0, got " + capacity);
         }
         this.keys = new EndErosionTileKey[capacity];
-        this.tiles = new EndErosionTile[capacity];
+        this.tiles = new EndErosionTileArtifact[capacity];
         this.lastAccess = new long[capacity];
     }
 
-    EndErosionTile getOrBuild(EndErosionTileKey key, Builder builder) {
+    @SuppressWarnings("unchecked")
+    T getOrBuild(EndErosionTileKey key, Builder<T> builder) {
         Objects.requireNonNull(key, "key");
         Objects.requireNonNull(builder, "builder");
         ensureOwner(key.runtimeFingerprint());
@@ -75,13 +76,13 @@ final class EndErosionTileCache {
             if (key.equals(this.keys[slot])) {
                 this.hits++;
                 this.lastAccess[slot] = access;
-                return this.tiles[slot];
+                return (T) this.tiles[slot];
             }
         }
 
         this.misses++;
-        BuildResult result = Objects.requireNonNull(builder.build(key), "build result");
-        EndErosionTile tile = result.tile();
+        BuildResult<T> result = Objects.requireNonNull(builder.build(key), "build result");
+        T tile = result.tile();
         if (!key.equals(tile.key())) {
             throw new IllegalArgumentException("builder returned a tile for a different key");
         }
@@ -90,7 +91,7 @@ final class EndErosionTileCache {
                 this.peakBuildPrimitiveBytes, result.peakPrimitiveBytes());
 
         int slot = selectSlot();
-        EndErosionTile previous = this.tiles[slot];
+        EndErosionTileArtifact previous = this.tiles[slot];
         if (previous == null) {
             this.size++;
         } else {

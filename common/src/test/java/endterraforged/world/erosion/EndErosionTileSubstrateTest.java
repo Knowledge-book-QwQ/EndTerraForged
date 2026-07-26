@@ -115,7 +115,7 @@ class EndErosionTileSubstrateTest {
         BuildLedger ledger = new BuildLedger();
         ErosionTileFixtureBuilder builder = new ErosionTileFixtureBuilder(
                 ErosionFixture.create(ErosionFixture.Kind.WATERSHED), ledger::record);
-        EndErosionTileCache cache = new EndErosionTileCache(2);
+        EndErosionTileCache<EndErosionTile> cache = new EndErosionTileCache<>(2);
         EndErosionTileKey firstKey = key(0, 0, OWNER);
         EndErosionTileKey secondKey = key(1, 0, OWNER);
         EndErosionTileKey thirdKey = key(2, 0, OWNER);
@@ -148,7 +148,7 @@ class EndErosionTileSubstrateTest {
 
     @Test
     void failedBuildDoesNotPublishAPartialTile() {
-        EndErosionTileCache cache = new EndErosionTileCache(2);
+        EndErosionTileCache<EndErosionTile> cache = new EndErosionTileCache<>(2);
         EndErosionTileKey key = key(0, 0, OWNER);
 
         assertThrows(IllegalStateException.class,
@@ -223,7 +223,7 @@ class EndErosionTileSubstrateTest {
     private static WorkerResult workerRun(ErosionTileFixtureBuilder builder,
                                           EndErosionTileKey[] keys,
                                           int rotation) {
-        EndErosionTileCache cache = new EndErosionTileCache(TILE_COUNT);
+        EndErosionTileCache<EndErosionTile> cache = new EndErosionTileCache<>(TILE_COUNT);
         long checksum = 0L;
         for (int index = 0; index < keys.length; index++) {
             checksum += cache.getOrBuild(keys[(index + rotation) % keys.length], builder).checksum();
@@ -236,7 +236,7 @@ class EndErosionTileSubstrateTest {
 
     private static long cacheChecksum(ErosionTileFixtureBuilder builder,
                                       EndErosionTileKey[] keys) {
-        EndErosionTileCache cache = new EndErosionTileCache(keys.length);
+        EndErosionTileCache<EndErosionTile> cache = new EndErosionTileCache<>(keys.length);
         long checksum = 0L;
         for (EndErosionTileKey key : keys) {
             checksum += cache.getOrBuild(key, builder).checksum();

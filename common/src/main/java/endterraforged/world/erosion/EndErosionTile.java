@@ -8,7 +8,7 @@ import java.util.Objects;
  * <p>Construction transfers ownership of every array to this artifact. A
  * builder must not retain or mutate those arrays after publication.</p>
  */
-final class EndErosionTile {
+final class EndErosionTile implements EndErosionTileArtifact {
 
     static final byte MASK_EROSION_PROTECTED = 1;
     static final byte MASK_ARCHIPELAGO_DOMINANT = 1 << 1;
@@ -84,7 +84,8 @@ final class EndErosionTile {
                 availableThicknessBlocks, ridgeInfluence, areaFamily, terrainTags, masks);
     }
 
-    EndErosionTileKey key() {
+    @Override
+    public EndErosionTileKey key() {
         return this.key;
     }
 
@@ -147,7 +148,8 @@ final class EndErosionTile {
         return (this.masks[index] & MASK_ARCHIPELAGO_DOMINANT) != 0;
     }
 
-    long primitiveBytes() {
+    @Override
+    public long primitiveBytes() {
         return (long) this.key.cellCount()
                 * (FLOAT_CHANNELS * Float.BYTES
                 + INT_CHANNELS * Integer.BYTES
